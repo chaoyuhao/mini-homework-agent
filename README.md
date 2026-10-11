@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
 
-[中文说明 / 复旦助教上手](README.zh-CN.md) · [Website](https://chaoyuhao.github.io/mini-homework-agent/) · [Use from your AI agent](docs/agent-integration.md) · [Fudan eLearning guide](docs/fudan-elearning.md)
+[中文说明 / 复旦助教上手](README.zh-CN.md) · [Documentation](https://github.com/chaoyuhao/mini-homework-agent/tree/main/docs) · [Use from your AI agent](docs/agent-integration.md) · [Fudan eLearning guide](docs/fudan-elearning.md)
 
 mini-homework-agent helps teaching assistants review Python assignments on Canvas-based learning platforms, including **复旦大学 eLearning / elearning.fudan.edu.cn**. It reuses the small **mini-swe-agent** core loop with homework-specific tools. It supports OpenAI-compatible model services and local providers, with no provider lock-in.
 

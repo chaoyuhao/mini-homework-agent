@@ -16,7 +16,7 @@ dependencies = ["jinja2>=3.1,<4", "pydantic>=2,<3"]
 
 [project.urls]
 Repository = "https://github.com/chaoyuhao/mini-homework-agent"
-Documentation = "https://chaoyuhao.github.io/mini-homework-agent/"
+Documentation = "https://github.com/chaoyuhao/mini-homework-agent/tree/main/docs"
 Issues = "https://github.com/chaoyuhao/mini-homework-agent/issues"
 
 [project.optional-dependencies]

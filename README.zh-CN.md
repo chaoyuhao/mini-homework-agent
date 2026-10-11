@@ -4,7 +4,7 @@
 
 适用于复旦大学助教及其他使用 Canvas LMS 的教师、助教。核心循环来自 mini-swe-agent，模型接口支持 OpenAI 兼容服务。
 
-[English](README.md) · [项目网站](https://chaoyuhao.github.io/mini-homework-agent/zh/) · [给你的 AI Agent 用](docs/agent-integration.md) · [复旦助教使用指南](docs/fudan-elearning.md)
+[English](README.md) · [项目文档](https://github.com/chaoyuhao/mini-homework-agent/tree/main/docs) · [给你的 AI Agent 用](docs/agent-integration.md) · [复旦助教使用指南](docs/fudan-elearning.md)
 
 ![mini-homework-agent 本地审核页面：Markdown 作业要求、Python 代码、逐项评分和人工审核](docs/review-preview.jpg)
 
