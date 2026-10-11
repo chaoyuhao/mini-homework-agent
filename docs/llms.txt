@@ -1,0 +1,11 @@
+# mini-homework-agent
+
+> A small AI homework grading agent for Canvas LMS and Fudan eLearning. Teacher Markdown requirements go in; validated drafts are reviewed by a human before explicit publication.
+
+- [English README](https://github.com/chaoyuhao/mini-homework-agent/blob/main/README.md): install, configure providers, run offline examples and real grading.
+- [中文说明](https://github.com/chaoyuhao/mini-homework-agent/blob/main/README.zh-CN.md): 复旦 eLearning、Canvas 助教自动批改流程。
+- [Agent integration](https://github.com/chaoyuhao/mini-homework-agent/blob/main/docs/agent-integration.md): using the draft-only CLI from another assistant.
+- [Fudan eLearning guide](https://github.com/chaoyuhao/mini-homework-agent/blob/main/docs/fudan-elearning.md): platform setup and read-only diagnostics.
+- [Example Markdown](https://github.com/chaoyuhao/mini-homework-agent/blob/main/examples/sum_even.md): explicit points table and task requirements.
+- [Architecture](https://github.com/chaoyuhao/mini-homework-agent/blob/main/docs/architecture.md): vendored mini-swe-agent loop and bounded tools.
+- [Security](https://github.com/chaoyuhao/mini-homework-agent/blob/main/SECURITY.md): credential, student-data, review, and writeback boundaries.

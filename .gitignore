@@ -1,0 +1,17 @@
+.secrets.json
+api.md
+.env
+.venv/
+.data/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+homework_standard/
+homework_submissions/
+.DS_Store
+*.textClipping
+.pytest_cache/
+.ruff_cache/
+.coverage

@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible problem using synthetic examples
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include API tokens, student data, or signed attachment URLs. Use the Security tab for vulnerabilities."
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include synthetic Markdown requirements and sample code if relevant.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Version, Python, operating system, and Canvas deployment
+    validations:
+      required: true

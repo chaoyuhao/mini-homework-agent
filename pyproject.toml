@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-homework-agent"
+version = "0.2.0"
+description = "A small homework grading agent based on the mini-swe-agent loop"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "mini-homework-agent contributors"}]
+keywords = ["canvas-lms", "elearning", "homework-grading", "fudan", "ai-agent", "markdown", "teaching-assistant"]
+classifiers = ["Development Status :: 4 - Beta", "Programming Language :: Python :: 3", "Topic :: Education", "Operating System :: POSIX"]
+requires-python = ">=3.10"
+dependencies = ["jinja2>=3.1,<4", "pydantic>=2,<3"]
+
+[project.urls]
+Repository = "https://github.com/chaoyuhao/mini-homework-agent"
+Documentation = "https://chaoyuhao.github.io/mini-homework-agent/"
+Issues = "https://github.com/chaoyuhao/mini-homework-agent/issues"
+
+[project.optional-dependencies]
+pdf = ["pypdf>=5,<7"]
+
+[project.scripts]
+elearning-grader = "grader.__main__:main"
+mini-homework-agent = "grader.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["grader*", "mini_homework_agent*"]
+
+[tool.setuptools.package-data]
+grader = ["index.html", "ocr.swift", "_vendor/mini_swe_agent/LICENSE.md", "_vendor/mini_swe_agent/UPSTREAM.md"]
