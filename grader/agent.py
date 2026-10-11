@@ -41,10 +41,13 @@ class HomeworkModel:
 
     def query(self, messages, **kwargs):
         wire = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] in ("system", "user", "assistant")]
-        response, _ = json_request(chat_completions_url(self.model["base_url"]), token=self.model["api_key"], method="POST", timeout=self.timeout, retries=0, payload={
+        payload = {
             "model": self.model["name"], "temperature": 0, "max_tokens": 1800,
-            "chat_template_kwargs": self.model["chat_template_kwargs"], "messages": wire,
-        })
+            "messages": wire,
+        }
+        if self.model.get("chat_template_kwargs"):
+            payload["chat_template_kwargs"] = self.model["chat_template_kwargs"]
+        response, _ = json_request(chat_completions_url(self.model["base_url"]), token=self.model["api_key"], method="POST", timeout=self.timeout, retries=0, payload=payload)
         try:
             choice = response["choices"][0]
             content = choice["message"]["content"].strip()

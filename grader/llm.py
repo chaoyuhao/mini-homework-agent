@@ -12,8 +12,9 @@ SYSTEM = """你是大学 Python 程序设计助教。依据题目及评分标准
 不要执行代码，不要假称已运行测试。仅根据静态代码证据判断；缺少材料、歧义或无法确认时标记 needs_review。
 不得依据姓名、学号、个人背景评分。不要推断抄袭或学术不端。
 只输出一个 JSON 对象，不输出 Markdown：
-{"criteria":[{"id":"标准ID","score":数字,"feedback":"评价与扣分理由","evidence":"代码片段或具体位置"}],"feedback":"总结与改进建议","confidence":0到1数字,"needs_review":布尔值}
-criteria 必须完整对应输入的每一个评分项，分数在 0 至该项 points 范围内。不要自己添加评分标准。"""
+{"criteria":[{"id":"输入rubric中的原始ID","score":数字,"feedback":"评价与扣分理由","evidence":"代码片段或具体位置"}],"feedback":"总结，遵守教师字数上限","confidence":0到1数字,"needs_review":布尔值,"assessment":"normal","assessment_reason":"依据附件内容说明分类"}
+criteria 必须完整对应输入的每一个评分项，id 原样使用 rubric.id，不能改为描述；分数在 0 至该项 points 范围内。不要自己添加评分标准。
+assessment 只能是 normal、insufficient 或 anomaly；评分政策决定如何使用它，不能推断学生动机。"""
 
 
 def validate_grade(value, rubric):

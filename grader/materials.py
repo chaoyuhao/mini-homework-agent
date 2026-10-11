@@ -12,6 +12,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 from xml.etree import ElementTree
 from .config import save_bytes
+from .net import RemoteError
 
 MAX_TEXT = 60_000
 MAX_ARCHIVE = 4_000_000
@@ -194,6 +195,9 @@ def submission_materials(canvas, submission, download_dir=None, attachment_recor
             # Do not send attachment filenames (often student names / IDs) to the model.
             chunks.append(f"[附件 {len(chunks) + 1}，格式 {PurePosixPath(name).suffix}]\n{text}")
             notes.extend(warnings)
+        except RemoteError as e:
+            # A transport/permission failure is not evidence that the student omitted work.
+            raise RemoteError("附件下载失败：" + str(e)) from None
         except Exception as e:
             notes.append(f"附件 {attachment.get('id')} 读取失败：{e if isinstance(e, ValueError) else type(e).__name__}")
     text = "\n\n".join(chunks)

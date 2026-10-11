@@ -11,7 +11,7 @@ This document records the repository's search positioning. It is a maintenance g
 | Other assistants | mini homework agent, Markdown rubric Canvas agent | README, agent integration guide, llms.txt |
 | Python instructors | Python homework feedback agent, Markdown grading rubric | Examples, local-file grading documentation |
 
-Repository description: **A tiny AI homework grading agent for Canvas LMS and Fudan eLearning. Markdown requirements, rubric-based feedback, human review, and explicit grade writeback.**
+Repository description: **A tiny AI homework grading agent for Canvas LMS and Fudan eLearning. Markdown requirements, rubric-based feedback, human review, and explicit grade writeback. 复旦 eLearning 助教 AI 自动判作业与 Python 作业批改。**
 
 Topics are selected for the actual implementation: `ai-agent`, `homework-grading`, `assignment-grading`, `canvas-lms`, `elearning`, `fudan-university`, `teaching-assistant`, `python`, `markdown`, `llm`, `mini-swe-agent`, `education`, and `human-in-the-loop`.
 

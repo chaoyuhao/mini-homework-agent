@@ -28,6 +28,11 @@ class AgentTests(unittest.TestCase):
         self.assertIn("HomeworkAgent", result["trajectory"]["info"]["config"]["agent_type"])
         self.assertNotIn(MODEL["api_key"], json.dumps(result))
 
+    def test_empty_provider_specific_kwargs_not_sent(self):
+        with patch.object(agent, "json_request", return_value=response(GOOD)) as call:
+            agent.run_grader(MODEL, ASSIGNMENT, RUBRIC, MATERIALS)
+        self.assertNotIn("chat_template_kwargs", call.call_args.kwargs["payload"])
+
     def test_bad_score_repaired_with_observation(self):
         bad = copy.deepcopy(GOOD)
         bad["criteria"][0]["score"] = 99

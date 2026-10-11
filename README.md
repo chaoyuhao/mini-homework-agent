@@ -10,6 +10,8 @@
 
 mini-homework-agent helps teaching assistants review Python assignments on Canvas-based learning platforms, including **复旦大学 eLearning / elearning.fudan.edu.cn**. It reuses the small **mini-swe-agent** core loop with homework-specific tools. It supports OpenAI-compatible model services and local providers, with no provider lock-in.
 
+中文：面向复旦 eLearning 和 Canvas 的助教 AI 自动判作业、Python 作业批改工具，使用 Markdown 标准，人工审核后回写成绩。
+
 ## Why this exists
 
 Homework instructions often live in slides or a separate document, while submissions live in the LMS. Give the agent the actual requirements as a `.md` file. It reads student code as data, drafts rubric-based scores with evidence, and leaves the final judgment to you.

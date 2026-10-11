@@ -144,6 +144,14 @@ class MaterialTests(unittest.TestCase):
             self.assertNotIn("student-private-name", text)
             self.assertEqual(records[0]["id"], 42)
 
+    def test_network_error_is_not_treated_as_student_omission(self):
+        fake = FakeCanvas()
+        def fail(file_id):
+            raise net.RemoteError("远程接口 HTTP 401")
+        fake.file = fail
+        with self.assertRaisesRegex(net.RemoteError, "HTTP 401"):
+            materials.submission_materials(fake, {"attachments": [{"id": 1}]})
+
     @unittest.skipUnless(importlib.util.find_spec("pypdf"), "optional pypdf is not installed")
     def test_image_only_pdf_is_not_scored_as_empty_answer(self):
         from pypdf import PdfWriter
