@@ -90,7 +90,7 @@ mini-homework-agent resume RUN_ID --workers 1 --request-interval 5
 
 原附件先下载到私有 `.data/attachments/`，审核页可以重新下载原件。AI 读取提取后的正文、代码和 OCR 文字。macOS 安装 Swift 命令行工具后，可以本机识别截图、Word/PPT 图片和 PDF 页面；其他系统可调用已安装的 Tesseract（中文/英文语言包），扫描 PDF 可能需人工处理。OCR 标点和缩进可能有误，必须对照原件。
 
-旧版 `.doc` 在 macOS 通过 `textutil` 转换，RAR 暂不支持，Pages 预览不等于完整文档。读不全的提交进入人工审查，不自动给零分。Markdown 里明确给出的宽松评分、迟交系数、评语字数及异常审查规则会独立记录；原始逐项分与政策建议分分别保存，避免隐含改分。
+旧版 `.doc` 在 macOS 通过 `textutil` 转换。RAR 可用系统 libarchive 在内存中静态读取，限制解压总大小 4 MB、最多 100 项；加密或分卷不完整时需人工查看。Pages 预览不等于完整文档。读不全的提交进入人工审查，不自动给零分。Markdown 里明确给出的宽松评分、迟交系数、评语字数及异常审查规则会独立记录；原始逐项分与政策建议分分别保存，避免隐含改分。
 
 ## 让其他 Agent 帮你判作业
 

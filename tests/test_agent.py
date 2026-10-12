@@ -68,6 +68,18 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(call.call_count, 2)
         self.assertEqual(caught.exception.trajectory["info"]["exit_status"], "RepeatedFormatError")
 
+    def test_invalid_json_delimiters_get_specific_repair_instruction(self):
+        bad = json.dumps(GOOD, ensure_ascii=False).replace('return 1"', 'return 1”')
+        def provider(url, **kwargs):
+            hint = kwargs["payload"]["messages"][-1]["content"]
+            if "英文双引号" in hint:
+                return response(GOOD)
+            return {"choices": [{"finish_reason": "stop", "message": {"content": bad}}]}, {}
+        with patch.object(agent, "json_request", side_effect=provider):
+            result = agent.run_grader(MODEL, ASSIGNMENT, RUBRIC, MATERIALS)
+        self.assertEqual(result["score"], 10)
+        self.assertEqual(result["agent_steps"], 2)
+
     def test_never_valid_grade_hits_step_limit(self):
         bad = copy.deepcopy(GOOD)
         bad["criteria"][0]["score"] = 99

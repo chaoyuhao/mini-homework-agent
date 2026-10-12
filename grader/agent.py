@@ -63,7 +63,7 @@ class HomeworkModel:
                 raise ValueError("只允许评分 JSON、read_submission 或 inspect_python")
         except (KeyError, IndexError, AttributeError, TypeError, ValueError) as e:
             assistant = self.format_message(role="assistant", content=locals().get("content", "[响应结构无效]"))
-            hint = self.format_message(role="user", content="格式校验失败：" + str(e) + "。请重新输出一个完整的评分 JSON 或允许的工具 JSON。")
+            hint = self.format_message(role="user", content="格式校验失败：" + str(e) + "。JSON 键名和字符串的定界符必须使用英文双引号，不能用中文引号结束字符串；内容中的双引号、反斜杠和换行必须按 JSON 规则转义。请重新输出一个完整的评分 JSON 或允许的工具 JSON，保留原文证据，不添加 JSON 之外的解释。")
             raise FormatError(assistant, hint) from None
         return self.format_message(role="assistant", content=content, extra={"actions": [action]})
 

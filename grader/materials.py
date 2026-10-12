@@ -86,6 +86,23 @@ def extract(name, data):
     elif suffix == ".ipynb":
         notebook = json.loads(decode(data))
         text = "\n\n".join(f"[{cell.get('cell_type', '')} cell {i + 1}]\n" + ("".join(cell.get("source", [])) if isinstance(cell.get("source", []), list) else cell["source"]) for i, cell in enumerate(notebook.get("cells", [])) if cell.get("cell_type") in ("code", "markdown"))
+    elif suffix == ".rar":
+        from .rar import read_rar
+        chunks = []
+        for name, raw in read_rar(data, max_bytes=MAX_ARCHIVE):
+            path = PurePosixPath(name)
+            if path.name.startswith(".") or "__MACOSX" in path.parts:
+                continue
+            if path.suffix.lower() in (".zip", ".rar", ".pages"):
+                notes.append("RAR 中的嵌套压缩文件无法读取，请人工查看")
+                continue
+            try:
+                inner, warnings = extract(name, raw)
+                chunks.append(f"[压缩包内附件 {len(chunks) + 1}，格式 {path.suffix}]\n{inner}")
+                notes.extend(warnings)
+            except Exception as e:
+                notes.append("RAR 内附件读取失败：" + (str(e) if isinstance(e, ValueError) else type(e).__name__))
+        text = "\n\n".join(chunks)
     elif suffix == ".doc":
         if data.startswith(b"PK"):
             return extract("converted.docx", data)

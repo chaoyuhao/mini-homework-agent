@@ -9,6 +9,8 @@
 - Request file bytes instead of JSON at download URLs, stop redirect cycles, and verify download sizes.
 - Recover looping downloads through Canvas's authorized signed-file URL endpoint.
 - Support project-only direct networking for VPN connections without changing system proxies or TLS checks.
+- Read RAR Python/Word submissions in memory through optional system libarchive, with size and entry limits.
+- Give specific JSON delimiter/escaping repair instructions after malformed model output.
 
 ## 0.2.0
 
