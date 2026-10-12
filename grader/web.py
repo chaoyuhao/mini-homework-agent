@@ -105,7 +105,7 @@ def serve(port=8765):
                     save_json(ROOT / ".secrets.json", cfg)
                     return self.reply({"saved": True})
                 if self.path == "/api/approve":
-                    row = workflow.approve(payload["run_id"], payload["user_id"], payload["score"], payload["feedback"], payload.get("reviewer_note", ""))
+                    row = workflow.approve(payload["run_id"], payload["user_id"], payload["score"], payload.get("feedback", ""), payload.get("reviewer_note", ""), payload.get("internal_reason"))
                     return self.reply(row)
                 if self.path in ("/api/grade", "/api/resume", "/api/demo", "/api/publish", "/api/reconcile"):
                     with job_lock:

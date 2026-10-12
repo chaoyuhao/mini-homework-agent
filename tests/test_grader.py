@@ -244,12 +244,15 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(self.canvas.calls), 1)
         self.assertEqual(workflow.load_run(run["id"])["results"][0]["status"], "publish_unknown")
 
-    def test_reconcile_finds_success_after_interrupted_response(self):
+    def test_reconcile_finds_legacy_comment_marker_after_interrupted_response(self):
         run = self.run_batch()
         self.approve(run)
         self.canvas.fail_write = True
         workflow.publish(run["id"], canvas=self.canvas)
-        self.canvas.s["submission_comments"] = [{"comment": self.canvas.calls[0][4]}]
+        saved = workflow.load_run(run["id"])
+        saved["results"][0].pop("publish_marker")
+        workflow.save_json(workflow.run_path(run["id"]), saved)
+        self.canvas.s["submission_comments"] = [{"comment": f"审核后反馈\n\n[elearning-grader:{run['id']}:3]"}]
         result = workflow.reconcile(run["id"], canvas=self.canvas)
         self.assertEqual(result["results"][0]["status"], "published")
         self.assertEqual(len(self.canvas.calls), 1)

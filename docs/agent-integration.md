@@ -60,7 +60,9 @@ Only after the user has reviewed the batch and authorized publication:
 .venv/bin/python -m mini_homework_agent publish RUN_ID --confirm
 ```
 
-If writeback is ambiguous, run `reconcile RUN_ID` before taking any further action. It checks comment markers; it does not resend updates blindly.
+If writeback is ambiguous, run `reconcile RUN_ID` before taking any further action. New writebacks add no technical comment markers, so reconciliation fetches platform state but keeps uncertain requests pending for human inspection. It still recognizes legacy marker-based records and never resends updates blindly.
+
+Student `feedback` may be empty. `internal_reason`, per-criterion explanations, evidence, and reviewer notes are local review data and must not be included in a Canvas comment. An empty reviewed comment sends only the numeric grade.
 
 ## Model/tool trajectory
 

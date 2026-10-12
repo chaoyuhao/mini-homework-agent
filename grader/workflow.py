@@ -14,7 +14,7 @@ from .config import DATA, save_json, selected_model
 from .llm import grade
 from .materials import plain_html, submission_materials
 from .net import RequestPacer
-from .requirements import apply_policy, grading_policy, markdown_rubric, validate_requirements
+from .requirements import apply_policy, grading_policy, internal_reason as derive_internal_reason, markdown_rubric, score_in, student_feedback, validate_requirements
 
 LOCK = threading.RLock()
 
@@ -269,7 +269,31 @@ def resume(run_id, *, workers=1, request_interval=5, model_name=None, canvas=Non
         return _execute(run, candidates, canvas, model, workers, request_interval, progress)
 
 
-def approve(run_id, user_id, score, feedback, reviewer_note=""):
+def content_score(row, score):
+    if score == row.get("final_score"):
+        if row.get("feedback_content_score") is not None:
+            return row["feedback_content_score"]
+        if row.get("status") in ("draft", "manual_review") and row.get("policy_score") is not None:
+            return row["policy_score"]
+    multiplier = row.get("late_multiplier_applied", 1)
+    if row.get("late") and isinstance(multiplier, (int, float)) and not isinstance(multiplier, bool) and 0 < multiplier <= 1:
+        return round(score / multiplier, 2)
+    return score
+
+
+def reviewed_feedback(row, score, feedback, policy):
+    if not isinstance(feedback, str) or len(feedback) > 10000:
+        raise ValueError("评语必须是文本，可以为空，且不超过 10000 字")
+    base = content_score(row, score)
+    text = student_feedback(feedback, base, policy)
+    if score_in(base, policy.get("student_feedback_scores", [])) and not text:
+        raise ValueError("此分数需要指出作业具体问题的学生评语")
+    if len(text) > policy.get("feedback_max_chars", 10000):
+        raise ValueError("学生评语超过教师指定的字数")
+    return text
+
+
+def approve(run_id, user_id, score, feedback="", reviewer_note="", internal_reason=None):
     with locked():
         run = load_run(run_id)
         if run["status"] not in ("complete", "paused"):
@@ -279,11 +303,18 @@ def approve(run_id, user_id, score, feedback, reviewer_note=""):
             raise ValueError("此结果不能审核：" + row["status"])
         if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score) or not 0 <= score <= run["points_possible"]:
             raise ValueError("审核分数超出范围")
-        if not isinstance(feedback, str) or not feedback.strip() or len(feedback) > 10000:
-            raise ValueError("评语不能为空或超过 10000 字")
+        policy = run.get("assignment", {}).get("grading_policy", {})
+        feedback = reviewed_feedback(row, score, feedback, policy)
         if (score != row.get("final_score") or row["status"] == "manual_review") and not reviewer_note.strip():
             raise ValueError("调整分数时请填写修改原因")
-        row.update(status="approved", final_score=score, final_feedback=feedback, reviewer_note=reviewer_note, reviewed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        reason = derive_internal_reason(row) if internal_reason is None else internal_reason
+        if not isinstance(reason, str) or len(reason) > 10000:
+            raise ValueError("内部评分原因必须为不超过 10000 字的文本")
+        if score != row.get("final_score") or row["status"] == "manual_review":
+            reason = reviewer_note.strip()
+        if score_in(content_score(row, score), policy.get("internal_reason_required_scores", [])) and not reason.strip():
+            raise ValueError("此分数需要内部评分原因；不会发送给学生")
+        row.update(status="approved", final_score=score, feedback_content_score=content_score(row, score), final_feedback=feedback, internal_reason=reason.strip(), reviewer_note=reviewer_note, reviewed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
         save_json(run_path(run_id), run)
         return row
 
@@ -308,8 +339,18 @@ def publish(run_id, *, canvas=None):
                 row["publish_error"] = "提交版本或平台成绩已变化，请重新批改和审核"
                 save_json(run_path(run_id), run)
                 continue
-            marker = f"[elearning-grader:{run_id}:{row['user_id']}]"
-            comment = row["final_feedback"] + "\n\n" + marker
+            try:
+                comment = reviewed_feedback(row, row["final_score"], row.get("final_feedback", ""), run.get("assignment", {}).get("grading_policy", {}))
+            except ValueError as e:
+                row["publish_error"] = str(e)
+                save_json(run_path(run_id), run)
+                continue
+            row["final_feedback"] = comment
+            row["internal_reason"] = derive_internal_reason(row)
+            # Only the explicitly reviewed student comment crosses this boundary.
+            # Technical audit markers and internal reasons remain local.
+            row["publish_with_comment"] = bool(comment)
+            row["publish_marker"] = None
             row["status"] = "publishing"
             save_json(run_path(run_id), run)
             try:
@@ -332,6 +373,10 @@ def reconcile(run_id, *, canvas=None):
             if row["status"] not in ("publishing", "publish_unknown"):
                 continue
             current = canvas.submission(run["course_id"], run["assignment_id"], row["user_id"])
+            if "publish_marker" in row and row["publish_marker"] is None:
+                row["canvas_score"] = current.get("score")
+                row["publish_error"] = "本次未发送程序标记，无法自动确认请求是否成功。请人工核对平台成绩与评语；保持待核对状态，不自动重发。"
+                continue
             marker = f"[elearning-grader:{run_id}:{row['user_id']}]"
             comments = current.get("submission_comments") or []
             if any(marker in c.get("comment", "") for c in comments):

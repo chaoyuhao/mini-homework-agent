@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Allow empty student comments and grade-only Canvas writeback without technical markers.
+- Keep internal grading reasons separate and support Markdown rules limiting comments to a specified content score.
 - Default to one grading worker and five-second Canvas request spacing.
 - Respect full `Retry-After` delays; preserve HTTP status and stop on Canvas 401/403.
 - Resume failed/incomplete downloads with saved instructions and attachment reuse, preserving drafts and human reviews.

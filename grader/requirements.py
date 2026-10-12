@@ -1,4 +1,5 @@
 import re
+import math
 
 MAX_REQUIREMENTS = 60_000
 
@@ -70,6 +71,8 @@ def grading_policy(markdown):
     floor = re.search(r"(?:尽量|正常)[^\n]{0,25}?给\s*(\d+(?:\.\d+)?)\s*(?:分)?以上", markdown)
     missing = re.search(r"(?:缺的[^\n]{0,25}|缺失[^\n]{0,25}|缺少[^\n]{0,25})[^\n]{0,25}?给\s*(\d+(?:\.\d+)?)", markdown)
     feedback = re.search(r"(\d+)\s*字以内", markdown)
+    feedback_score = re.search(r"只有\s*(\d+(?:\.\d+)?)\s*分[^\n。]{0,30}才有评语", markdown)
+    internal_score = re.search(r"(\d+(?:\.\d+)?)\s*分[^\n。]{0,20}内部[^\n。]{0,12}(?:原因|依据)", markdown)
     if late:
         multiplier = float(late.group(1)) / 100
         if not 0 < multiplier <= 1:
@@ -81,16 +84,44 @@ def grading_policy(markdown):
         result["insufficient_score"] = float(missing.group(1))
     if feedback:
         result["feedback_max_chars"] = min(int(feedback.group(1)), 5000)
+    if feedback_score:
+        result["student_feedback_scores"] = [float(feedback_score.group(1))]
+    if internal_score:
+        result["internal_reason_required_scores"] = [float(internal_score.group(1))]
     if "异常" in markdown and re.search(r"人工(?:审查|审核|复核)", markdown):
         result["anomaly_manual_review"] = True
     return result
 
 
+def internal_reason(value):
+    """Preserve local reasoning independently of the optional student comment."""
+    explicit = value.get("internal_reason", "")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    deductions = [c["feedback"].strip() for c in value.get("criteria", []) if c.get("score", 0) < c.get("points", 0) and isinstance(c.get("feedback"), str) and c["feedback"].strip()]
+    if deductions:
+        return "；".join(deductions)[:10000]
+    return next((value[k].strip() for k in ("assessment_reason", "feedback") if isinstance(value.get(k), str) and value[k].strip()), "")
+
+
+def score_in(score, scores):
+    return isinstance(score, (int, float)) and not isinstance(score, bool) and any(math.isclose(score, s, rel_tol=0, abs_tol=1e-8) for s in scores)
+
+
+def student_feedback(feedback, content_score, policy):
+    if not isinstance(feedback, str):
+        raise ValueError("评语必须是文本，可以为空")
+    if "student_feedback_scores" in policy and not score_in(content_score, policy["student_feedback_scores"]):
+        return ""
+    return feedback.strip()
+
+
 def apply_policy(result, policy, maximum, *, late=False):
     base = result["score"]
+    reason = internal_reason(result)
     assessment = result.get("assessment", "normal")
     if assessment == "anomaly" and policy.get("anomaly_manual_review"):
-        return {"raw_score": base, "policy_score": None, "final_score": None, "status": "manual_review", "needs_review": True, "final_feedback": result["feedback"]}
+        return {"raw_score": base, "policy_score": None, "final_score": None, "status": "manual_review", "needs_review": True, "final_feedback": student_feedback(result.get("feedback", ""), None, policy), "internal_reason": reason}
     if assessment == "normal" and "normal_min_score" in policy:
         base = max(base, policy["normal_min_score"])
     elif assessment == "insufficient" and "insufficient_score" in policy:
@@ -98,4 +129,4 @@ def apply_policy(result, policy, maximum, *, late=False):
     if not 0 <= base <= maximum:
         raise ValueError("Markdown 宽松评分规则超出作业满分")
     final = round(base * policy.get("late_multiplier", 1), 2) if late else round(base, 2)
-    return {"raw_score": result["score"], "policy_score": round(base, 2), "late_multiplier_applied": policy.get("late_multiplier", 1) if late else 1, "final_score": final, "final_feedback": result["feedback"]}
+    return {"raw_score": result["score"], "policy_score": round(base, 2), "late_multiplier_applied": policy.get("late_multiplier", 1) if late else 1, "final_score": final, "final_feedback": student_feedback(result.get("feedback", ""), base, policy), "internal_reason": reason}

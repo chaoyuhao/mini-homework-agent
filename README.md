@@ -133,6 +133,8 @@ The workflow downloads attachments before grading. Word/PDF text, Python source,
 
 Teacher Markdown may contain explicit leniency, late-percentage, short-feedback, and anomaly-review rules. The program records the raw rubric total separately from policy-adjusted suggestions, applies a recognized late multiplier once, and leaves anomaly results without an automatic final grade. When using a Canvas automatic late policy, check that you are not applying both deductions before publication.
 
+Student comments are optional and separate from `internal_reason`, criteria, evidence, and review notes, which remain local. An empty comment updates only the grade. Markdown can specify “只有90分的作业才有评语” and “95分的作业内部保留原因” to restrict comments by the content score before a late deduction. Other scores have no student comment; the designated score requires a concrete problem description.
+
 ## Small, understandable architecture
 
 ```mermaid
@@ -157,7 +159,7 @@ Read [docs/architecture.md](docs/architecture.md) for the code map and [docs/age
 - Original attachments are downloaded into the private `.data/attachments/` folder and can be reopened from the review UI. The model receives requirements, rubric, and extracted submission text, including local OCR output when available. Canvas tokens and student metadata are not sent to it; **personal information written inside student files may still be in the text**.
 - Drafts, cached results, and trajectories stay in `.data/`. Exports contain course data. `.gitignore` excludes them, `.secrets.json`, `.env`, and private `api.md` files.
 - Before writeback, assignment and submission snapshots are rechecked. Avoid concurrent edits by multiple graders: Canvas's unconditional update endpoint leaves a small check/write race window.
-- A timed-out writeback is not blindly retried. The reconciliation command checks for a unique comment marker. Canvas late policies may adjust the final score; the returned platform score is retained.
+- A timed-out writeback is not blindly retried. New writebacks contain no technical comment markers; reconciliation fetches the current platform state and keeps an ambiguous request pending for human inspection. Legacy marker-based records remain supported. Canvas late policies may adjust the final score; the returned platform score is retained.
 - Per-item scoring stays in the local record; writeback currently publishes the final numeric score and final feedback, not `rubric_assessment`.
 
 This is a community project, not an official Fudan University or Instructure product. Use a model service suitable for your course data and review its suggestions.

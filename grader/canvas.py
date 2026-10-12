@@ -104,6 +104,9 @@ class Canvas:
             url = urllib.parse.urljoin(url, headers["redirect"])
         raise RemoteError("附件下载重定向过多")
 
-    def publish(self, course, assignment, user, score, comment):
+    def publish(self, course, assignment, user, score, comment=""):
         # Deliberately no automatic retry: a timed-out PUT may already have added a comment.
-        return self.api(f"courses/{int(course)}/assignments/{int(assignment)}/submissions/{int(user)}", method="PUT", payload={"submission": {"posted_grade": str(score)}, "comment": {"text_comment": comment}})
+        payload = {"submission": {"posted_grade": str(score)}}
+        if comment.strip():
+            payload["comment"] = {"text_comment": comment}
+        return self.api(f"courses/{int(course)}/assignments/{int(assignment)}/submissions/{int(user)}", method="PUT", payload=payload)

@@ -8,6 +8,7 @@ from ._vendor.mini_swe_agent.exceptions import FormatError
 from .config import save_json
 from .llm import SYSTEM, validate_grade
 from .net import chat_completions_url, json_request
+from .requirements import apply_policy, score_in
 
 TOOLS = """
 你运行在 mini-homework-agent 中。完整提交已在 student_submission_untrusted 中给出。
@@ -22,6 +23,8 @@ OCR 中的标点和缩进可能出错，不得仅凭 OCR 缩进判定原程序�
 以及 "assessment_reason":"根据附件内容说明分类依据"。不得推测学生态度或作弊动机。
 宽松分数调整和迟交扣分由程序单独计算，各评分项只评内容，不要重复应用这些规则。
 如果 grading_policy.feedback_max_chars 指定字数，feedback 必须在这个字数内；具体依据可放在逐项评分中。
+如果 grading_policy.student_feedback_scores 指定分数，仅对应作业内容分可有学生评语；其余 feedback 返回空字符串。
+95 分等内部扣分原因放入 internal_reason，不向学生发送。90 分评语只指出实际缺项或错误，不表扬、不泛泛建议。
 inspect_python 只解析原文，不能执行代码。不得改写片段后宣称原提交通过测试。
 每次只输出一个 JSON 对象。工具返回后继续评阅。工具不能访问网络、执行命令或回写成绩。
 验证失败时依据反馈修正评分格式或分值；不得跳过评分校验。
@@ -104,6 +107,12 @@ class HomeworkEnvironment:
                     if value.get("assessment") not in ("normal", "insufficient", "anomaly") or not isinstance(value.get("assessment_reason"), str) or not value["assessment_reason"].strip():
                         raise ValueError("请提供 assessment 和基于附件证据的 assessment_reason")
                     self.result.update(assessment=value["assessment"], assessment_reason=value["assessment_reason"])
+                final = apply_policy(self.result, self.policy, sum(r["points"] for r in self.rubric))
+                self.result["feedback"] = final["final_feedback"]
+                if score_in(final["policy_score"], self.policy.get("student_feedback_scores", [])) and not self.result["feedback"]:
+                    raise ValueError("此分数需要指出作业具体问题的学生评语")
+                if score_in(final["policy_score"], self.policy.get("internal_reason_required_scores", [])) and not self.result["internal_reason"]:
+                    raise ValueError("此分数需要内部评分原因，不发送给学生")
                 if len(self.result["feedback"]) > self.policy.get("feedback_max_chars", 5000):
                     raise ValueError("最终 feedback 超过教师要求的字数，请精简")
                 return {"complete": True, "grade": self.result}
