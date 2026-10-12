@@ -48,6 +48,8 @@ The default is one worker with five seconds between Canvas requests. To resume a
 
 Resume uses the original saved instructions and model. It preserves successful drafts and human reviews, reuses downloaded attachments, and checks submission snapshots before retrying. A 401/403 pauses the batch; a paused CLI run exits with status 1. Do not interpret it as a student omission or repeat credential-rejected requests indefinitely. The run's `progress_completed` and `progress_total` describe the current attempt, while `results` includes retained work.
 
+If the original model repeatedly fails to produce valid scores, `resume RUN_ID --model MODEL_NAME` changes the model only for retryable items. Existing results remain unchanged and each new result records its actual model; all drafts still require human review.
+
 ## Keep the approval boundary
 
 The embedded agent has no publication tool. Another assistant must not mark its own grading suggestions as human-approved. Ask the human to review the concrete drafts; explicit approval and explicit publication are separate from generating them.

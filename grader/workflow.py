@@ -141,7 +141,7 @@ def _execute(run, candidates, canvas, model, workers, request_interval, progress
     assignment_warnings = run["warnings"]
     prior = {r["user_id"]: r for r in run["results"]}
     stop = threading.Event()
-    run.update(status="running", processing={"workers": workers, "request_interval": request_interval}, progress_completed=0, progress_total=len(candidates))
+    run.update(status="running", processing={"workers": workers, "request_interval": request_interval, "model": model["name"]}, progress_completed=0, progress_total=len(candidates))
     run.pop("blocked_reason", None)
     save_json(run_path(run["id"]), run)
     if progress:
@@ -169,6 +169,7 @@ def _execute(run, candidates, canvas, model, workers, request_interval, progress
                 save_json(cache, result)
                 item["cached"] = False
             item.update(result)
+            item["model"] = model["name"]
             item["needs_review"] = result["needs_review"] or bool(item["warnings"]) or source == "provisional"
             item.update(apply_policy(result, policy, run["points_possible"], late=item["late"]))
             if any(any(term in w for term in ("读取失败", "无法读取", "仅尝试", "超过", "截断")) for w in warnings):
@@ -227,7 +228,7 @@ def retryable(row):
     return row["status"] in ("draft", "manual_review") and any(any(term in warning for term in ("RemoteError", "附件下载失败", "HTTP 401", "HTTP 403")) for warning in row.get("warnings", []))
 
 
-def resume(run_id, *, workers=1, request_interval=5, canvas=None, progress=None):
+def resume(run_id, *, workers=1, request_interval=5, model_name=None, canvas=None, progress=None):
     RequestPacer(request_interval)
     if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 8:
         raise ValueError("并行数量必须为 1–8")
@@ -242,7 +243,7 @@ def resume(run_id, *, workers=1, request_interval=5, canvas=None, progress=None)
         if guard != run["assignment_guard"]:
             raise ValueError("题目或评分标准已变化，请另建批次")
         submissions = {s["user_id"]: s for s in canvas.submissions(run["course_id"], run["assignment_id"])}
-        model = selected_model(run["model"])
+        model = selected_model(model_name or run["model"])
         with locked():
             # Re-read reviews made while the read-only preflight was in progress.
             run = load_run(run_id)

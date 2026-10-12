@@ -11,6 +11,7 @@
 - Support project-only direct networking for VPN connections without changing system proxies or TLS checks.
 - Read RAR Python/Word submissions in memory through optional system libarchive, with size and entry limits.
 - Give specific JSON delimiter/escaping repair instructions after malformed model output.
+- Allow a different configured model for failed items while preserving completed drafts and recording the actual model per result.
 
 ## 0.2.0
 

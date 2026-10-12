@@ -210,6 +210,18 @@ class RecoveryTests(unittest.TestCase):
             workflow.resume(run["id"], canvas=self.canvas)
         self.assertEqual(workflow.load_run(run["id"]), run)
 
+    def test_resume_model_override_changes_only_failed_row(self):
+        run = self.make_run()
+        preserved = copy.deepcopy(run["results"][1:])
+        run["results"][0].update(status="error", error="model format failure")
+        workflow.save_json(workflow.run_path(run["id"]), run)
+        with patch.object(workflow, "selected_model", return_value={"name": "fallback", "base_url": "https://fallback.example"}):
+            result = workflow.resume(run["id"], model_name="fallback", canvas=self.canvas)
+        self.assertEqual(result["model"], "synthetic")
+        self.assertEqual(result["results"][1:], preserved)
+        self.assertEqual(result["results"][0]["model"], "fallback")
+        self.assertEqual(result["processing"]["model"], "fallback")
+
     def test_resume_changed_submission_requires_new_batch(self):
         run = self.make_run()
         run["results"][0].update(status="error", error="download")

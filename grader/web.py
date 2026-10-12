@@ -128,7 +128,7 @@ def serve(port=8765):
                             elif action == "/api/reconcile":
                                 run = workflow.reconcile(payload["run_id"])
                             elif action == "/api/resume":
-                                run = workflow.resume(payload["run_id"], progress=progress)
+                                run = workflow.resume(payload["run_id"], model_name=payload.get("model"), progress=progress)
                             else:
                                 limit = int(payload.get("limit", 5))
                                 if not 0 <= limit <= 10000:

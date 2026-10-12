@@ -36,6 +36,7 @@ def main():
     resume.add_argument("run_id")
     resume.add_argument("--workers", type=int, default=1)
     resume.add_argument("--request-interval", type=float, default=5)
+    resume.add_argument("--model", help="仅为失败项改用另一模型；已有结果保留")
     local = commands.add_parser("grade-local", help="按 Markdown 要求批改本地提交，不连接 Canvas")
     local.add_argument("--requirements", required=True)
     local.add_argument("--submission", required=True)
@@ -85,7 +86,7 @@ def main():
             requirements = Path(args.requirements).read_text(encoding="utf-8-sig")
             result = workflow.batch(args.course_id, args.assignment_id, requirements=requirements, limit=args.limit, workers=args.workers, request_interval=args.request_interval, model_name=args.model, custom_rubric=rubric, notes=args.notes, include_graded=args.include_graded, progress=progress)
         elif args.command == "resume":
-            result = workflow.resume(args.run_id, workers=args.workers, request_interval=args.request_interval, progress=progress)
+            result = workflow.resume(args.run_id, workers=args.workers, request_interval=args.request_interval, model_name=args.model, progress=progress)
         elif args.command == "grade-local":
             from pathlib import Path
             rubric = json.loads(Path(args.rubric).read_text()) if args.rubric else None
