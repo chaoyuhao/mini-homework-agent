@@ -25,12 +25,17 @@ def main():
     batch.add_argument("course_id", type=int)
     batch.add_argument("assignment_id", type=int)
     batch.add_argument("--limit", type=int, default=5, help="默认先批 5 份；0 为全部")
-    batch.add_argument("--workers", type=int, default=4)
+    batch.add_argument("--workers", type=int, default=1, help="并行数量，默认逐份处理")
+    batch.add_argument("--request-interval", type=float, default=5, help="Canvas 请求间隔（秒），默认 5")
     batch.add_argument("--model")
     batch.add_argument("--rubric", help="自定义 rubric JSON 文件")
     batch.add_argument("--requirements", required=True, help="本次作业要求的 Markdown 文件")
     batch.add_argument("--notes", default="")
     batch.add_argument("--include-graded", action="store_true")
+    resume = commands.add_parser("resume", help="慢速续跑失败项，保留已有草稿和人工审核")
+    resume.add_argument("run_id")
+    resume.add_argument("--workers", type=int, default=1)
+    resume.add_argument("--request-interval", type=float, default=5)
     local = commands.add_parser("grade-local", help="按 Markdown 要求批改本地提交，不连接 Canvas")
     local.add_argument("--requirements", required=True)
     local.add_argument("--submission", required=True)
@@ -46,6 +51,10 @@ def main():
     model = commands.add_parser("model", help="切换默认模型")
     model.add_argument("name")
     args = parser.parse_args()
+    def progress(run):
+        completed = run.get("progress_completed", len(run["results"]))
+        total = run.get("progress_total", run["total"])
+        print(f"批次 {run['id']}：本次 {completed}/{total}", flush=True)
     try:
         if args.command == "serve":
             from .web import serve
@@ -74,7 +83,9 @@ def main():
                 raise ValueError("limit 不能为负数")
             rubric = json.loads(Path(args.rubric).read_text()) if args.rubric else None
             requirements = Path(args.requirements).read_text(encoding="utf-8-sig")
-            result = workflow.batch(args.course_id, args.assignment_id, requirements=requirements, limit=args.limit, workers=args.workers, model_name=args.model, custom_rubric=rubric, notes=args.notes, include_graded=args.include_graded, progress=lambda r: print(f"批次 {r['id']}：{len(r['results'])}/{r['total']}", flush=True))
+            result = workflow.batch(args.course_id, args.assignment_id, requirements=requirements, limit=args.limit, workers=args.workers, request_interval=args.request_interval, model_name=args.model, custom_rubric=rubric, notes=args.notes, include_graded=args.include_graded, progress=progress)
+        elif args.command == "resume":
+            result = workflow.resume(args.run_id, workers=args.workers, request_interval=args.request_interval, progress=progress)
         elif args.command == "grade-local":
             from pathlib import Path
             rubric = json.loads(Path(args.rubric).read_text()) if args.rubric else None
@@ -85,6 +96,10 @@ def main():
             result = workflow.reconcile(args.run_id)
         if isinstance(result, dict) and "results" in result and "id" in result:
             print(json.dumps({"run_id": result["id"], "status": result["status"], "count": len(result["results"]), "path": str(workflow.run_path(result["id"]))}, ensure_ascii=False, indent=2))
+            if result.get("blocked_reason"):
+                print(result["blocked_reason"], file=sys.stderr)
+            if result["status"] == "paused":
+                return 1
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
     except (ValueError, RuntimeError, OSError) as e:

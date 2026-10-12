@@ -75,9 +75,16 @@ mini-homework-agent assignments COURSE_ID
 # 只生成草稿
 mini-homework-agent grade COURSE_ID ASSIGNMENT_ID \
   --requirements 作业要求.md --limit 5
+
+# 保留已完成结果，仅补判失败项
+mini-homework-agent resume RUN_ID --workers 1 --request-interval 5
 ```
 
 用 `--limit 0` 处理全部符合条件的提交；已评分提交默认跳过，只有显式 `--include-graded` 才生成重评草稿。`publish RUN_ID --confirm` 只回写已审核结果；`reconcile RUN_ID` 用于核对响应不确定的回写，避免重复发送评语。
+
+默认逐份处理，平台请求至少间隔 5 秒；页面也可选择处理速度。遇到 Canvas 401/403 会暂停并保存已有结果，修复凭证或权限后点击“慢速重试失败项”，或运行 `resume`。续跑沿用保存的 Markdown、标准和模型，复用已下载原件，保留成功草稿、人工审核和确需人工评阅的异常。题目或提交版本变化时需要另建批次。
+
+默认沿用电脑的系统/环境代理。如果已连接的 VPN 可以直达课程和模型服务，可在私有 `.secrets.json` 中设置 `"network_mode": "direct"`，让本项目的课程、附件、模型请求绕过 HTTP 代理。TLS 证书校验仍然开启，电脑的全局代理设置不变；直连不可用时使用默认的 `"system"`。
 
 ## 附件下载与图片读取
 

@@ -1,5 +1,6 @@
 """Read student content as data. Never execute or extract uploaded programs."""
 import ast
+import hashlib
 import io
 import json
 import re
@@ -176,7 +177,7 @@ def extract(name, data):
     return text[:MAX_TEXT], notes
 
 
-def submission_materials(canvas, submission, download_dir=None, attachment_records=None):
+def submission_materials(canvas, submission, download_dir=None, attachment_records=None, *, reuse_records=None):
     chunks, notes = [], []
     if submission.get("body"):
         chunks.append(plain_html(submission["body"]))
@@ -184,20 +185,32 @@ def submission_materials(canvas, submission, download_dir=None, attachment_recor
         notes.append("URL 提交未自动抓取，请人工查看其内容")
     for attachment in submission.get("attachments", []):
         try:
-            name, raw = canvas.file(attachment["id"])
+            saved = next((a for a in (reuse_records or []) if a["id"] == attachment["id"]), None)
+            raw = None
+            if saved and download_dir is not None and re.fullmatch(str(int(attachment["id"])) + r"\.[a-z0-9]{1,12}", saved.get("stored_name", "")):
+                original = download_dir / saved["stored_name"]
+                if original.is_file() and original.stat().st_size == saved.get("bytes") and original.stat().st_size <= 10_000_000:
+                    raw = original.read_bytes()
+                    if saved.get("sha256") and hashlib.sha256(raw).hexdigest() != saved["sha256"]:
+                        raw = None
+                    else:
+                        name = saved["name"]
+            if raw is None:
+                context = {"submission_id": submission["id"]} if submission.get("id") is not None else {}
+                name, raw = canvas.file(attachment["id"], **context)
             if download_dir is not None:
                 suffix = PurePosixPath(name).suffix.lower()
                 stored_name = str(int(attachment["id"])) + (suffix if re.fullmatch(r"\.[a-z0-9]{1,12}", suffix) else ".bin")
                 save_bytes(download_dir / stored_name, raw)
                 if attachment_records is not None:
-                    attachment_records.append({"id": int(attachment["id"]), "name": name, "stored_name": stored_name, "bytes": len(raw)})
+                    attachment_records.append({"id": int(attachment["id"]), "name": name, "stored_name": stored_name, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
             text, warnings = extract(name, raw)
             # Do not send attachment filenames (often student names / IDs) to the model.
             chunks.append(f"[附件 {len(chunks) + 1}，格式 {PurePosixPath(name).suffix}]\n{text}")
             notes.extend(warnings)
         except RemoteError as e:
             # A transport/permission failure is not evidence that the student omitted work.
-            raise RemoteError("附件下载失败：" + str(e)) from None
+            raise type(e)("附件下载失败：" + str(e), status_code=e.status_code) from None
         except Exception as e:
             notes.append(f"附件 {attachment.get('id')} 读取失败：{e if isinstance(e, ValueError) else type(e).__name__}")
     text = "\n\n".join(chunks)

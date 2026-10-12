@@ -1,14 +1,38 @@
 import ipaddress
 import json
+import math
+from email.utils import parsedate_to_datetime
 import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
+from .config import settings
+
 
 class RemoteError(RuntimeError):
-    pass
+    def __init__(self, message, *, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class RequestPacer:
+    """One shared clock for a client's pages, downloads, and retries."""
+    def __init__(self, seconds):
+        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 <= seconds <= 300:
+            raise ValueError("请求间隔必须为 0–300 秒")
+        self.seconds = seconds
+        self.next_start = 0
+        self.lock = threading.Lock()
+
+    def wait(self):
+        with self.lock:
+            delay = self.next_start - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            self.next_start = time.monotonic() + self.seconds
 
 
 def chat_completions_url(base):
@@ -22,6 +46,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(NoRedirect)
+DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
 
 
 def origin(url):
@@ -41,8 +66,12 @@ def public_https(url):
         raise RemoteError("下载域名解析失败") from None
 
 
-def request(url, *, token="", method="GET", payload=None, timeout=45, max_bytes=12_000_000, retries=2):
-    headers = {"Accept": "application/json", "User-Agent": "elearning-grader/0.1"}
+def request(url, *, token="", method="GET", payload=None, timeout=45, max_bytes=12_000_000, retries=2, before_request=None, accept="application/json"):
+    mode = settings().get("network_mode", "system")
+    if mode not in ("system", "direct"):
+        raise ValueError("network_mode 必须为 system 或 direct")
+    opener = DIRECT_OPENER if mode == "direct" else OPENER
+    headers = {"Accept": accept, "User-Agent": "elearning-grader/0.1"}
     if token:
         headers["Authorization"] = "Bearer " + token
     data = None
@@ -51,20 +80,34 @@ def request(url, *, token="", method="GET", payload=None, timeout=45, max_bytes=
         headers["Content-Type"] = "application/json"
     attempts = retries + 1 if method in ("GET", "POST") else 1
     for attempt in range(attempts):
+        if before_request:
+            before_request()
         try:
-            with OPENER.open(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=timeout) as response:
+            with opener.open(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=timeout) as response:
                 body = response.read(max_bytes + 1)
                 if len(body) > max_bytes:
                     raise RemoteError("响应文件超过大小限制")
                 return body, dict(response.headers)
         except urllib.error.HTTPError as e:
-            if e.code in (301, 302, 303, 307, 308):
-                return None, {"redirect": e.headers.get("Location", "")}
-            if e.code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
-                delay = min(float(e.headers.get("Retry-After", 2 ** attempt)) if e.headers.get("Retry-After", "").isdigit() else 2 ** attempt, 20)
+            code, response_headers = e.code, dict(e.headers)
+            e.close()
+            if code in (301, 302, 303, 307, 308):
+                return None, {"redirect": response_headers.get("Location", "")}
+            if code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
+                retry_after = response_headers.get("Retry-After", "")
+                try:
+                    delay = float(retry_after)
+                    if not math.isfinite(delay):
+                        raise ValueError()
+                except ValueError:
+                    try:
+                        delay = parsedate_to_datetime(retry_after).timestamp() - time.time()
+                    except (TypeError, ValueError, OverflowError):
+                        delay = 2 ** attempt
+                delay = max(0, delay)
                 time.sleep(delay)
                 continue
-            raise RemoteError(f"远程接口 HTTP {e.code}") from None
+            raise RemoteError(f"远程接口 HTTP {code}", status_code=code) from None
         except (urllib.error.URLError, TimeoutError, OSError):
             if attempt + 1 < attempts:
                 time.sleep(2 ** attempt)

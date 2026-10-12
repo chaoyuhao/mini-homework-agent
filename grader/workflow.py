@@ -9,10 +9,11 @@ import threading
 import time
 import uuid
 
-from .canvas import Canvas
+from .canvas import Canvas, CanvasAccessError
 from .config import DATA, save_json, selected_model
 from .llm import grade
 from .materials import plain_html, submission_materials
+from .net import RequestPacer
 from .requirements import apply_policy, grading_policy, markdown_rubric, validate_requirements
 
 LOCK = threading.RLock()
@@ -90,9 +91,28 @@ def runs():
     return result
 
 
-def batch(course_id, assignment_id, *, requirements="", limit=5, workers=4, model_name=None, custom_rubric=None, notes="", include_graded=False, canvas=None, progress=None):
+@contextlib.contextmanager
+def processing(run_id):
+    """A crashed process releases this lock; a second live resume cannot overlap."""
+    path = run_path(run_id).with_suffix(".lock")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with path.open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("此批次正在运行，请等待当前任务结束") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def batch(course_id, assignment_id, *, requirements="", limit=5, workers=1, request_interval=5, model_name=None, custom_rubric=None, notes="", include_graded=False, canvas=None, progress=None):
     requirements = validate_requirements(requirements)
-    canvas = canvas or Canvas()
+    RequestPacer(request_interval)
+    if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 8:
+        raise ValueError("并行数量必须为 1–8")
+    canvas = canvas or Canvas(request_interval=request_interval)
     assignment = canvas.assignment(course_id, assignment_id)
     if assignment.get("group_category_id"):
         raise ValueError("第一版不支持小组作业，请按小组人工评阅，避免重复或错误回写")
@@ -109,14 +129,31 @@ def batch(course_id, assignment_id, *, requirements="", limit=5, workers=4, mode
     if limit:
         candidates = candidates[:limit]
     run = {"id": uuid.uuid4().hex, "course_id": int(course_id), "assignment_id": int(assignment_id), "title": assignment["name"], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "points_possible": assignment["points_possible"], "model": model["name"], "rubric": rubric, "rubric_source": source, "assignment": assignment_data, "assignment_guard": digest({k: assignment.get(k) for k in ("name", "description", "points_possible", "rubric", "updated_at")}), "status": "running", "warnings": assignment_warnings, "total": len(candidates), "skipped": len(rows) - len(candidates), "results": []}
+    run["submission_ids"] = [s["user_id"] for s in candidates]
+    run["submission_snapshots"] = {str(s["user_id"]): snapshot(s) for s in candidates}
+    with processing(run["id"]):
+        return _execute(run, candidates, canvas, model, workers, request_interval, progress)
+
+
+def _execute(run, candidates, canvas, model, workers, request_interval, progress):
+    assignment_data, rubric = run["assignment"], run["rubric"]
+    policy, source = assignment_data["grading_policy"], run["rubric_source"]
+    assignment_warnings = run["warnings"]
+    prior = {r["user_id"]: r for r in run["results"]}
+    stop = threading.Event()
+    run.update(status="running", processing={"workers": workers, "request_interval": request_interval}, progress_completed=0, progress_total=len(candidates))
+    run.pop("blocked_reason", None)
     save_json(run_path(run["id"]), run)
     if progress:
         progress(run)
+
     def one(sub):
+        if stop.is_set():
+            return None
         item = {"user_id": sub["user_id"], "student": sub.get("user", {}).get("name", str(sub["user_id"])), "attempt": sub.get("attempt"), "submitted_at": sub.get("submitted_at"), "previous_score": sub.get("score"), "snapshot": snapshot(sub), "status": "draft", "warnings": list(assignment_warnings), "late": bool(sub.get("late"))}
         try:
             item["attachments"] = []
-            content, warnings = submission_materials(canvas, sub, DATA / "attachments" / run["id"] / str(sub["user_id"]), item["attachments"])
+            content, warnings = submission_materials(canvas, sub, DATA / "attachments" / run["id"] / str(sub["user_id"]), item["attachments"], reuse_records=prior.get(sub["user_id"], {}).get("attachments"))
             item["warnings"].extend(warnings)
             item["materials"] = content
             if not content.strip():
@@ -133,32 +170,108 @@ def batch(course_id, assignment_id, *, requirements="", limit=5, workers=4, mode
                 item["cached"] = False
             item.update(result)
             item["needs_review"] = result["needs_review"] or bool(item["warnings"]) or source == "provisional"
-            item.update(apply_policy(result, policy, assignment["points_possible"], late=item["late"]))
+            item.update(apply_policy(result, policy, run["points_possible"], late=item["late"]))
             if any(any(term in w for term in ("读取失败", "无法读取", "仅尝试", "超过", "截断")) for w in warnings):
                 item.update(status="manual_review", final_score=None, needs_review=True, manual_review_reason="附件未完整读取，请对照原件人工评分")
         except Exception as e:
             item["status"] = "error"
             item["error"] = str(e) if isinstance(e, (ValueError, RuntimeError)) else type(e).__name__
+            if isinstance(e, CanvasAccessError):
+                item["canvas_access_error"] = True
+                stop.set()
+            if prior.get(sub["user_id"]):
+                # Failed recovery must not hide originals already available for review.
+                originals = {a["id"]: a for a in prior[sub["user_id"]].get("attachments", [])}
+                originals.update({a["id"]: a for a in item.get("attachments", [])})
+                item["attachments"] = list(originals.values())
             if hasattr(e, "trajectory"):
                 item["trajectory"] = e.trajectory
+        except BaseException:
+            stop.set()
+            raise
         return item
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(max(workers, 1), 8)) as pool:
-        futures = [pool.submit(one, sub) for sub in candidates]
-        for future in concurrent.futures.as_completed(futures):
-            run["results"].append(future.result())
-            save_json(run_path(run["id"]), run)
-            if progress:
-                progress(run)
-    run["results"].sort(key=lambda r: r["user_id"])
-    run["status"] = "complete"
-    save_json(run_path(run["id"]), run)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(one, sub) for sub in candidates]
+            try:
+                for future in concurrent.futures.as_completed(futures):
+                    item = future.result()
+                    if item is None:
+                        continue
+                    prior[item["user_id"]] = item
+                    run["results"] = sorted(prior.values(), key=lambda r: r["user_id"])
+                    run["progress_completed"] += 1
+                    if item.get("canvas_access_error"):
+                        run["blocked_reason"] = item["error"]
+                    save_json(run_path(run["id"]), run)
+                    if progress:
+                        progress(run)
+            except BaseException:
+                stop.set()
+                for future in futures:
+                    future.cancel()
+                raise
+    except BaseException:
+        stop.set()
+        raise
+    finally:
+        run["status"] = "paused" if stop.is_set() else "complete"
+        save_json(run_path(run["id"]), run)
     return run
+
+
+def retryable(row):
+    if row["status"] == "error":
+        return True
+    # Older batches represented failed downloads as warnings on partial materials.
+    return row["status"] in ("draft", "manual_review") and any(any(term in warning for term in ("RemoteError", "附件下载失败", "HTTP 401", "HTTP 403")) for warning in row.get("warnings", []))
+
+
+def resume(run_id, *, workers=1, request_interval=5, canvas=None, progress=None):
+    RequestPacer(request_interval)
+    if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 8:
+        raise ValueError("并行数量必须为 1–8")
+    with processing(run_id):
+        run = load_run(run_id)
+        if run.get("demo") or run["status"] == "superseded":
+            raise ValueError("演示或已替代的批次不能续跑")
+        validate_requirements(run["assignment"]["instructor_markdown"])
+        canvas = canvas or Canvas(request_interval=request_interval)
+        assignment = canvas.assignment(run["course_id"], run["assignment_id"])
+        guard = digest({k: assignment.get(k) for k in ("name", "description", "points_possible", "rubric", "updated_at")})
+        if guard != run["assignment_guard"]:
+            raise ValueError("题目或评分标准已变化，请另建批次")
+        submissions = {s["user_id"]: s for s in canvas.submissions(run["course_id"], run["assignment_id"])}
+        model = selected_model(run["model"])
+        with locked():
+            # Re-read reviews made while the read-only preflight was in progress.
+            run = load_run(run_id)
+            prior = {r["user_id"]: r for r in run["results"]}
+            ids = run.get("submission_ids", sorted(prior))
+            candidates = []
+            for user_id in ids:
+                row = prior.get(user_id)
+                if row and not retryable(row):
+                    continue
+                sub = submissions.get(user_id)
+                previous = run.get("submission_snapshots", {}).get(str(user_id), (row or {}).get("snapshot"))
+                if not sub or not previous or snapshot(sub) != previous:
+                    if row:
+                        row.update(status="error", final_score=None, needs_review=True, error="提交版本或平台成绩已变化，请另建批次；保留原记录")
+                    continue
+                if sub.get("excused") or not sub.get("submitted_at") or sub.get("submission_type") not in ("online_text_entry", "online_upload"):
+                    continue
+                candidates.append(sub)
+            run["retried"] = len(candidates)
+            run["status"] = "running"
+            save_json(run_path(run_id), run)
+        return _execute(run, candidates, canvas, model, workers, request_interval, progress)
 
 
 def approve(run_id, user_id, score, feedback, reviewer_note=""):
     with locked():
         run = load_run(run_id)
-        if run["status"] != "complete":
+        if run["status"] not in ("complete", "paused"):
             raise ValueError("批次尚未完成")
         row = next(r for r in run["results"] if r["user_id"] == int(user_id))
         if row["status"] not in ("draft", "approved", "manual_review"):
@@ -180,6 +293,8 @@ def publish(run_id, *, canvas=None):
         run = load_run(run_id)
         if run.get("demo"):
             raise ValueError("演示批次不能回写平台")
+        if run["status"] not in ("complete", "paused"):
+            raise ValueError("批次正在运行或已替代，不能回写")
         assignment = canvas.assignment(run["course_id"], run["assignment_id"])
         guard = digest({k: assignment.get(k) for k in ("name", "description", "points_possible", "rubric", "updated_at")})
         if guard != run["assignment_guard"]:

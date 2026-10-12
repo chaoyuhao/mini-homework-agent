@@ -13,7 +13,7 @@ def initialize():
     path = ROOT / ".secrets.json"
     if path.exists():
         raise ValueError(".secrets.json 已存在，初始化不会覆盖你的配置")
-    save_json(path, {"canvas_base_url": "https://elearning.fudan.edu.cn", "canvas_token": "", "models": [{"name": "your-model-name", "base_url": "https://your-model-provider.example/v1", "api_key": "", "chat_template_kwargs": {}}]})
+    save_json(path, {"canvas_base_url": "https://elearning.fudan.edu.cn", "canvas_token": "", "network_mode": "system", "models": [{"name": "your-model-name", "base_url": "https://your-model-provider.example/v1", "api_key": "", "chat_template_kwargs": {}}]})
     return path
 
 

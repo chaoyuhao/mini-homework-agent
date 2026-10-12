@@ -107,7 +107,7 @@ def serve(port=8765):
                 if self.path == "/api/approve":
                     row = workflow.approve(payload["run_id"], payload["user_id"], payload["score"], payload["feedback"], payload.get("reviewer_note", ""))
                     return self.reply(row)
-                if self.path in ("/api/grade", "/api/demo", "/api/publish", "/api/reconcile"):
+                if self.path in ("/api/grade", "/api/resume", "/api/demo", "/api/publish", "/api/reconcile"):
                     with job_lock:
                         if any(j["status"] == "running" for j in jobs.values()):
                             raise ValueError("当前任务仍在运行，请稍候")
@@ -115,6 +115,8 @@ def serve(port=8765):
                         job = {"id": job_id, "status": "running", "kind": self.path, "completed": 0, "total": 0}
                         jobs[job_id] = job
                     action = self.path
+                    def progress(r):
+                        job.update(run_id=r["id"], completed=r.get("progress_completed", len(r["results"])), total=r.get("progress_total", r["total"]))
                     def work():
                         try:
                             if action == "/api/demo":
@@ -125,14 +127,16 @@ def serve(port=8765):
                                 run = workflow.publish(payload["run_id"])
                             elif action == "/api/reconcile":
                                 run = workflow.reconcile(payload["run_id"])
+                            elif action == "/api/resume":
+                                run = workflow.resume(payload["run_id"], progress=progress)
                             else:
                                 limit = int(payload.get("limit", 5))
                                 if not 0 <= limit <= 10000:
                                     raise ValueError("批改数量无效")
-                                def progress(r):
-                                    job.update(run_id=r["id"], completed=len(r["results"]), total=r["total"])
-                                run = workflow.batch(int(payload["course_id"]), int(payload["assignment_id"]), requirements=payload.get("requirements", ""), limit=limit, model_name=payload.get("model"), custom_rubric=payload.get("rubric"), progress=progress)
-                            job.update(status="complete", run_id=run["id"], completed=len(run["results"]), total=run["total"])
+                                run = workflow.batch(int(payload["course_id"]), int(payload["assignment_id"]), requirements=payload.get("requirements", ""), limit=limit, workers=payload.get("workers", 1), request_interval=payload.get("request_interval", 5), model_name=payload.get("model"), custom_rubric=payload.get("rubric"), progress=progress)
+                            job.update(status=run["status"], run_id=run["id"], completed=run.get("progress_completed", len(run["results"])), total=run.get("progress_total", run["total"]))
+                            if run.get("blocked_reason"):
+                                job["error"] = run["blocked_reason"]
                         except Exception as e:
                             job.update(status="error", error=str(e) if isinstance(e, (ValueError, RuntimeError)) else type(e).__name__)
                     threading.Thread(target=work, daemon=True).start()

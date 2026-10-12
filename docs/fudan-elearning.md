@@ -8,6 +8,12 @@ mini-homework-agent 用于 `https://elearning.fudan.edu.cn` 上的 Canvas 课程
 
 该项目曾验证助教角色可以读取两门 Python 课的课程和作业列表。不同课程的权限设置可能不同；真实成绩回写须由助教审核并明确操作。遇到 401 不应直接推断为需要管理员权限。
 
+Canvas 的标准请求限流返回 429，可参考 [官方限流说明](https://developerdocs.instructure.com/services/canvas/basics/file.throttling)。401 表示凭证未被接受，403 表示当前访问被拒绝；降低速度不能保证修复凭证或权限问题。本工具默认逐份处理、请求间隔 5 秒，遵守 429 响应的 `Retry-After`；401/403 会停止继续请求并保存已有结果。
+
+macOS 的 Python 网络客户端可能自动采用系统代理，即使终端没有设置代理环境变量。若 VPN 已连接且课程、附件存储及模型接口均可直连，在私有 `.secrets.json` 中设置 `"network_mode": "direct"` 可以仅让本项目绕过 HTTP 代理。默认 `"system"` 沿用电脑原有连接方式，不要在直连测试失败时强制切换。
+
+附件下载地址出现循环跳转时，工具会使用 Canvas 提供的只读 `public_url` 接口取得签名直链，并传入提交 ID 供平台核对查看权限。它不修改文件的公开范围，也不会把 Canvas 令牌转发到文件存储域名。参考 [Files API](https://developerdocs.instructure.com/services/canvas/resources/files)。
+
 ## 在 iTerm 中只读检查
 
 ```bash
@@ -31,6 +37,8 @@ python3 scripts/test_canvas.py --saved-token --course-id COURSE_ID
 ## 审核
 
 默认先批 5 份未评分提交。重点核对题目理解、遗漏内容、扣分依据和评语。AI 不执行学生程序，也没有自动查重；不能把静态分析当作运行测试结果。
+
+中断后可以点击“慢速重试失败项”或运行 `mini-homework-agent resume RUN_ID`，只补判失败或附件下载不完整的条目。已下载原件、成功草稿及人工审核会保留；提交版本变化时需另建批次。
 
 逐份确认后，再点击“回写已审核结果”。平台可能立即展示评语和分数。重新提交、题目变化或已有成绩变动会使本批更新被阻止；逾期规则可能由 Canvas 自动扣减分数。
 

@@ -111,6 +111,9 @@ mini-homework-agent assignments COURSE_ID
 mini-homework-agent grade COURSE_ID ASSIGNMENT_ID \
   --requirements homework.md --limit 5
 
+# Retry failed/incomplete downloads; preserve successful drafts and reviews
+mini-homework-agent resume RUN_ID --workers 1 --request-interval 5
+
 # After reviewing individual drafts in the UI
 mini-homework-agent publish RUN_ID --confirm
 
@@ -119,6 +122,10 @@ mini-homework-agent reconcile RUN_ID
 ```
 
 Use `--rubric rubric.json` for an explicit rubric and `--model MODEL_NAME` to select a provider. Already graded submissions are skipped unless you explicitly pass `--include-graded`. `benchmark --rounds 4` compares your configured providers on short synthetic examples and chooses the fastest one passing the basic checks. These checks do not establish course grading accuracy.
+
+Grading defaults to one worker and at least five seconds between Canvas requests, including pagination, downloads, redirects, and retries. A Canvas 401/403 stops further requests and preserves the batch. After fixing access, `resume RUN_ID` uses the batch's saved Markdown, rubric, and model, reuses downloaded originals, and retries failed items. Successful drafts, human reviews, and genuine manual-review cases remain intact. Changed assignments or submissions require a new batch.
+
+Networking follows your system/environment proxy settings by default. If a working VPN provides direct access, set `"network_mode": "direct"` in your private `.secrets.json` to bypass HTTP proxies for this project only. It applies to Canvas, attachments, and model requests, keeps TLS verification enabled, and does not change your computer's proxy settings. Keep `"system"` when direct access is unavailable.
 
 ## Attachment reading and local OCR
 

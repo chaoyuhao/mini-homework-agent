@@ -39,6 +39,15 @@ Initialize private configuration with `init`, or use the user's existing configu
 
 The command returns `run_id`, `count`, and the local JSON record path. A submission error is retained separately from a numeric score. Use the local review UI to inspect code, criteria, evidence, final score, and feedback.
 
+The default is one worker with five seconds between Canvas requests. To resume after a download/access failure, first restore the authorized credential, then run:
+
+```bash
+.venv/bin/python -m mini_homework_agent resume RUN_ID \
+  --workers 1 --request-interval 5
+```
+
+Resume uses the original saved instructions and model. It preserves successful drafts and human reviews, reuses downloaded attachments, and checks submission snapshots before retrying. A 401/403 pauses the batch; a paused CLI run exits with status 1. Do not interpret it as a student omission or repeat credential-rejected requests indefinitely. The run's `progress_completed` and `progress_total` describe the current attempt, while `results` includes retained work.
+
 ## Keep the approval boundary
 
 The embedded agent has no publication tool. Another assistant must not mark its own grading suggestions as human-approved. Ask the human to review the concrete drafts; explicit approval and explicit publication are separate from generating them.

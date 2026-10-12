@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Default to one grading worker and five-second Canvas request spacing.
+- Respect full `Retry-After` delays; preserve HTTP status and stop on Canvas 401/403.
+- Resume failed/incomplete downloads with saved instructions and attachment reuse, preserving drafts and human reviews.
+- Add a local UI retry action and guard against overlapping recovery and writeback during grading.
+- Request file bytes instead of JSON at download URLs, stop redirect cycles, and verify download sizes.
+- Recover looping downloads through Canvas's authorized signed-file URL endpoint.
+- Support project-only direct networking for VPN connections without changing system proxies or TLS checks.
+
 ## 0.2.0
 
 - Initial public release of mini-homework-agent for Canvas LMS and Fudan eLearning.
