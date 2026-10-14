@@ -4,7 +4,7 @@ The system separates the grading loop from LMS updates. This keeps reviewable dr
 
 | Component | Role |
 | --- | --- |
-| `grader/requirements.py` | Validate teacher Markdown; parse an explicit points table |
+| `grader/requirements.py` | Snapshot separate task/policy Markdown; parse points and explicit question headings |
 | `grader/canvas.py` | Read account-accessible Canvas resources; perform explicit reviewed updates |
 | `grader/materials.py` | Bounded, read-only extraction of supported student files |
 | `grader/agent.py` | OpenAI-compatible model adapter, homework-only environment, mini-swe-agent subclass |
@@ -17,7 +17,11 @@ The loop starts with the assignment requirements, rubric, and submission text. A
 
 The model adapter serializes only its model name. It does not serialize provider or Canvas credentials. A trajectory preserves the linear message/tool history for auditing; because it contains homework text, it is private course data.
 
-The workflow chooses a rubric in this order: explicit custom rubric, teacher Markdown table, Canvas rubric, provisional criteria. Missing requirements fail before constructing a Canvas client. Provisional scoring is labeled for human review.
+The workflow chooses a rubric in this order: explicit custom rubric, teacher Markdown table, explicitly requested holistic scoring, Canvas rubric, provisional criteria. Missing requirements fail before constructing a Canvas client. Provisional scoring is labeled for human review.
+
+Optional shared policy Markdown is separate from the task Markdown and never supplies the task's rubric or question list. The numeric policy merges shared defaults with explicit task overrides. Both sources, the resolved policy, and the current scoring structure are saved, so resume does not reload edited source files. Legacy single-document records stay valid.
+
+Explicit numbered question headings produce `assignment.questions`. Each must have a corresponding `question_checks` entry with a teacher ID, completion status, feedback, and evidence. Those checks have no numeric weights. Holistic scoring uses one full-assignment `overall` rubric item; explicit tables can retain arbitrary dimensions or per-question allocations. An `uncertain` check yields manual review with no final score. The model receives question IDs and titles alongside the full Markdown, without a duplicate copy of each question body.
 
 Teacher review is separate from the loop. The environment cannot approve or publish. The publication path acquires a process-shared file lock, rechecks the assignment and submission snapshot, records the in-progress state, and sends one Canvas PUT. Optional student feedback is separate from internal reasons and evidence. Empty feedback omits the comment payload entirely, and nonempty feedback includes only the reviewed problem text. No technical marker is appended. Uncertain new requests remain pending for human inspection after reconciliation; older marker-based records can still be confirmed. Neither path retries blindly.
 

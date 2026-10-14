@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Separate optional shared grading-policy Markdown from assignment requirements in the CLI and UI, retaining both snapshots and legacy single-file support.
+- Support explicit holistic scoring and independent evidence checks for numbered questions without inventing point allocations; uncertain questions require manual scoring.
 - Allow empty student comments and grade-only Canvas writeback without technical markers.
 - Keep internal grading reasons separate and support Markdown rules limiting comments to a specified content score.
 - Default to one grading worker and five-second Canvas request spacing.

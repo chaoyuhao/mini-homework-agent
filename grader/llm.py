@@ -19,7 +19,7 @@ assessment 只能是 normal、insufficient 或 anomaly；评分政策决定如�
 feedback 可以为空。需要给学生评语时只写具体缺项或错误，不写表扬、泛泛建议或鼓励；内部判断和可选建议放在 internal_reason 与逐项评价中。"""
 
 
-def validate_grade(value, rubric):
+def validate_grade(value, rubric, *, questions=None):
     if not isinstance(value, dict) or not isinstance(value.get("criteria"), list):
         raise ValueError("模型结果缺少评分项")
     expected = {str(r["id"]): r for r in rubric}
@@ -43,7 +43,24 @@ def validate_grade(value, rubric):
     reason = value.get("internal_reason", "")
     if type(value.get("needs_review")) is not bool or not isinstance(feedback, str) or len(feedback) > 5000 or not isinstance(reason, str) or len(reason) > 10000:
         raise ValueError("模型反馈结构无效")
-    return {"criteria": clean, "score": round(sum(r["score"] for r in clean), 2), "feedback": feedback.strip(), "internal_reason": internal_reason({**value, "criteria": clean}), "confidence": confidence, "needs_review": value["needs_review"] or confidence < 0.8}
+    result = {"criteria": clean, "score": round(sum(r["score"] for r in clean), 2), "feedback": feedback.strip(), "confidence": confidence, "needs_review": value["needs_review"] or confidence < 0.8}
+    if questions:
+        expected_questions = {q["id"]: q for q in questions}
+        checks = value.get("question_checks")
+        if not isinstance(checks, list) or len(checks) != len(expected_questions) or {q.get("id") for q in checks if isinstance(q, dict) and isinstance(q.get("id"), str)} != set(expected_questions):
+            raise ValueError("question_checks 必须一项不漏地对应 assignment.questions 的原始 id")
+        clean_checks = []
+        for check in checks:
+            if check.get("status") not in ("met", "gap", "uncertain"):
+                raise ValueError("逐题 status 必须是 met、gap 或 uncertain")
+            for field in ("feedback", "evidence"):
+                if not isinstance(check.get(field), str) or not check[field].strip() or len(check[field]) > 3000:
+                    raise ValueError("每道题必须有内部评价 feedback 与具体 evidence")
+            clean_checks.append({"id": check["id"], "title": expected_questions[check["id"]]["title"], "status": check["status"], "feedback": check["feedback"].strip(), "evidence": check["evidence"].strip()})
+        result["question_checks"] = sorted(clean_checks, key=lambda q: list(expected_questions).index(q["id"]))
+        result["needs_review"] |= any(q["status"] == "uncertain" for q in clean_checks)
+    result["internal_reason"] = internal_reason({**value, **result})
+    return result
 
 
 def grade(model, assignment, rubric, materials, *, timeout=60):

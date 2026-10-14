@@ -50,9 +50,21 @@ mini-homework-agent init
 | 可读性 | 2 | 命名清晰、结构简洁 |
 ```
 
-评分表总分应与平台满分一致。优先级是：自定义 JSON rubric → Markdown 评分表 → 平台 rubric → 明确标记的临时标准。没有明确标准时，临时标准按功能 60%、题目要求的边界情况 25%、可读性 15% 分配，需你确认是否适用。
+评分表总分应与平台满分一致。优先级是：自定义 JSON rubric → Markdown 评分表 → 明确指定的整体评分 → 平台 rubric → 明确标记的临时标准。没有明确标准时，临时标准按功能 60%、题目要求的边界情况 25%、可读性 15% 分配，需你确认是否适用。
 
 完整例子：[examples/sum_even.md](examples/sum_even.md)。
+
+题目与通用给分口径可以分开：每次作业的文件只写本次要求和评分结构，共用文件写宽松给分、迟交、评语与审核规则。页面有独立的“通用给分规则”输入；CLI 用 `--policy` 加载。两份文本和合并后的政策都会保存到本批记录。本次作业明确写出的政策覆盖共用基线；旧的单文件格式继续支持，续跑沿用批次快照。两份文本合计最多 60000 字符，不自动截断。
+
+多题但没有给出各题分值时，可以在作业文件写 `评分方式：整体评分`，并用 `## 第1题`、`## 第2题` 分开要求。Agent 必须逐题给完成状态和依据，再给整体分，不自行假定两题各占 50 分，也不套用其他作业的维度。某题依据不足时整份留给人工审核。若老师明确给了各题分值，仍可使用评分表。
+
+```bash
+mini-homework-agent grade COURSE_ID ASSIGNMENT_ID \
+  --requirements examples/two_questions.md \
+  --policy examples/grading_policy.md --limit 5
+```
+
+例子：[两题作业](examples/two_questions.md)、[可修改的 100 分通用规则](examples/grading_policy.md)。Markdown 中的链接图片不会自动送给模型，请把决策树分支、公式等关键条件补成文字。
 
 ## 批改、审核、回写
 

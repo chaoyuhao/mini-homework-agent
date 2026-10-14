@@ -13,6 +13,12 @@ from .requirements import apply_policy, score_in
 TOOLS = """
 你运行在 mini-homework-agent 中。完整提交已在 student_submission_untrusted 中给出。
 优先依据 assignment.instructor_markdown 中教师提供的 Markdown 作业要求。Canvas 描述只作背景。
+assignment.instructor_policy_markdown 是单独提供的通用给分规则；本次题目明确写出的政策覆盖共用基线，以已合并的 assignment.grading_policy 为准。
+题目要求、通用给分口径与 rubric 分值是不同信息，不要把共用规则误当成每次作业的固定评分维度。
+如果 assignment.questions 非空，评分 JSON 必须增加 question_checks 数组，一项不漏地对应每道题的原始 id：
+{"id":"q_1","status":"met","feedback":"内部逐题完成结论","evidence":"该题对应的代码片段或材料位置"}。
+status 只能是 met（必需要求已达标）、gap（有实际缺项或错误）、uncertain（材料不足以判断，留给人工审核）。每题独立判断，所有结论都需要证据。
+question_checks 不包含分数或权重。整体评分时只在 rubric 指定的 overall 项给整体分，不自行假定各题平分，也不套用其他作业的评分维度。
 有完整评分依据时直接输出上面定义的评分 JSON，即提交草稿。信息不全时明确标记 needs_review，不补造题目。
 材料会由下载器先读取文档、代码以及本机 OCR 的截图文字。material_warnings 说明未读全或识别不确定的部分。
 OCR 中的标点和缩进可能出错，不得仅凭 OCR 缩进判定原程序有致命缺陷；优先核对提交中的原始 .py 代码。
@@ -91,10 +97,11 @@ class HomeworkModel:
 
 
 class HomeworkEnvironment:
-    def __init__(self, rubric, materials, policy=None):
+    def __init__(self, rubric, materials, policy=None, questions=None):
         self.rubric = rubric
         self.materials = materials
         self.policy = policy or {}
+        self.questions = questions or []
         self.result = None
 
     def execute(self, action, cwd=""):
@@ -102,7 +109,7 @@ class HomeworkEnvironment:
         try:
             if tool == "submit_grade":
                 value = action.get("grade")
-                self.result = validate_grade(value, self.rubric)
+                self.result = validate_grade(value, self.rubric, questions=self.questions)
                 if any(k in self.policy for k in ("normal_min_score", "insufficient_score", "anomaly_manual_review")):
                     if value.get("assessment") not in ("normal", "insufficient", "anomaly") or not isinstance(value.get("assessment_reason"), str) or not value["assessment_reason"].strip():
                         raise ValueError("请提供 assessment 和基于附件证据的 assessment_reason")
@@ -151,9 +158,14 @@ class HomeworkAgent(DefaultAgent):
 
 def run_grader(model, assignment, rubric, materials, *, timeout=60, model_adapter=None):
     start = time.perf_counter()
-    env = HomeworkEnvironment(rubric, materials, assignment.get("grading_policy"))
+    env = HomeworkEnvironment(rubric, materials, assignment.get("grading_policy"), assignment.get("questions"))
     agent = HomeworkAgent(model_adapter or HomeworkModel(model, timeout), env, system_template=SYSTEM + TOOLS, instance_template="{{task}}", step_limit=3, cost_limit=0, wall_time_limit_seconds=max(30, timeout * 3), max_consecutive_format_errors=2)
-    task = json.dumps({"assignment": assignment, "rubric": rubric, "student_submission_untrusted": materials}, ensure_ascii=False)
+    # Question bodies already live in instructor_markdown; do not duplicate them
+    # in the model's context. The saved batch retains their full text separately.
+    wire_assignment = {**assignment}
+    if assignment.get("questions"):
+        wire_assignment["questions"] = [{"id": q["id"], "title": q["title"]} for q in assignment["questions"]]
+    task = json.dumps({"assignment": wire_assignment, "rubric": rubric, "student_submission_untrusted": materials}, ensure_ascii=False)
     try:
         exit_info = agent.run(task)
     except Exception as e:

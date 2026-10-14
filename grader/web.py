@@ -133,7 +133,7 @@ def serve(port=8765):
                                 limit = int(payload.get("limit", 5))
                                 if not 0 <= limit <= 10000:
                                     raise ValueError("批改数量无效")
-                                run = workflow.batch(int(payload["course_id"]), int(payload["assignment_id"]), requirements=payload.get("requirements", ""), limit=limit, workers=payload.get("workers", 1), request_interval=payload.get("request_interval", 5), model_name=payload.get("model"), custom_rubric=payload.get("rubric"), progress=progress)
+                                run = workflow.batch(int(payload["course_id"]), int(payload["assignment_id"]), requirements=payload.get("requirements", ""), grading_rules=payload.get("grading_rules", ""), limit=limit, workers=payload.get("workers", 1), request_interval=payload.get("request_interval", 5), model_name=payload.get("model"), custom_rubric=payload.get("rubric"), progress=progress)
                             job.update(status=run["status"], run_id=run["id"], completed=run.get("progress_completed", len(run["results"])), total=run.get("progress_total", run["total"]))
                             if run.get("blocked_reason"):
                                 job["error"] = run["blocked_reason"]

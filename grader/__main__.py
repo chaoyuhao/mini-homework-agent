@@ -30,6 +30,7 @@ def main():
     batch.add_argument("--model")
     batch.add_argument("--rubric", help="自定义 rubric JSON 文件")
     batch.add_argument("--requirements", required=True, help="本次作业要求的 Markdown 文件")
+    batch.add_argument("--policy", help="跨作业复用的通用给分规则 Markdown 文件（可选）")
     batch.add_argument("--notes", default="")
     batch.add_argument("--include-graded", action="store_true")
     resume = commands.add_parser("resume", help="慢速续跑失败项，保留已有草稿和人工审核")
@@ -39,6 +40,7 @@ def main():
     resume.add_argument("--model", help="仅为失败项改用另一模型；已有结果保留")
     local = commands.add_parser("grade-local", help="按 Markdown 要求批改本地提交，不连接 Canvas")
     local.add_argument("--requirements", required=True)
+    local.add_argument("--policy", help="通用给分规则 Markdown 文件（可选）")
     local.add_argument("--submission", required=True)
     local.add_argument("--points", type=float, default=100)
     local.add_argument("--title", default="本地作业")
@@ -84,13 +86,15 @@ def main():
                 raise ValueError("limit 不能为负数")
             rubric = json.loads(Path(args.rubric).read_text()) if args.rubric else None
             requirements = Path(args.requirements).read_text(encoding="utf-8-sig")
-            result = workflow.batch(args.course_id, args.assignment_id, requirements=requirements, limit=args.limit, workers=args.workers, request_interval=args.request_interval, model_name=args.model, custom_rubric=rubric, notes=args.notes, include_graded=args.include_graded, progress=progress)
+            grading_rules = Path(args.policy).read_text(encoding="utf-8-sig") if args.policy else ""
+            result = workflow.batch(args.course_id, args.assignment_id, requirements=requirements, grading_rules=grading_rules, limit=args.limit, workers=args.workers, request_interval=args.request_interval, model_name=args.model, custom_rubric=rubric, notes=args.notes, include_graded=args.include_graded, progress=progress)
         elif args.command == "resume":
             result = workflow.resume(args.run_id, workers=args.workers, request_interval=args.request_interval, model_name=args.model, progress=progress)
         elif args.command == "grade-local":
             from pathlib import Path
             rubric = json.loads(Path(args.rubric).read_text()) if args.rubric else None
-            result = workflow.grade_local(Path(args.requirements), Path(args.submission), title=args.title, points=args.points, model_name=args.model, custom_rubric=rubric)
+            grading_rules = Path(args.policy).read_text(encoding="utf-8-sig") if args.policy else ""
+            result = workflow.grade_local(Path(args.requirements), Path(args.submission), title=args.title, points=args.points, grading_rules=grading_rules, model_name=args.model, custom_rubric=rubric)
         elif args.command == "publish":
             result = workflow.publish(args.run_id)
         else:

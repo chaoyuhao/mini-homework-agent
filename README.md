@@ -93,7 +93,19 @@ Implement sum_even(numbers). Support negative integers and return 0 for an empty
 | Readability | 2 | Clear function and variable names |
 ```
 
-English headers `criterion`, `points`, and `description` are supported too. A scoring table's total must match the assignment maximum. Priority: explicit JSON rubric → Markdown table or explicit point list → Canvas rubric → visibly marked provisional criteria. Parenthetical allocations such as `Code quality（20分）` are supported as well. The provisional weights are 60% functional requirements, 25% required edge cases, and 15% readability.
+English headers `criterion`, `points`, and `description` are supported too. A scoring table's total must match the assignment maximum. Priority: explicit JSON rubric → Markdown table or explicit point list → explicitly requested holistic scoring → Canvas rubric → visibly marked provisional criteria. Parenthetical allocations such as `Code quality（20分）` are supported as well. The provisional weights are 60% functional requirements, 25% required edge cases, and 15% readability.
+
+Keep reusable grading rules in a separate Markdown file, passed with `--policy` or the UI's **通用给分规则** input. Each batch saves both sources and the resolved policy. Assignment-specific policy statements override shared defaults. Existing single-file instructions still work. The combined inputs are limited to 60,000 characters and are never silently truncated.
+
+For multiple questions without stated weights, write `Scoring mode: holistic` (or `评分方式：整体评分`) and use headings such as `## Question 1` / `## 第1题`. The agent must record a status and evidence for every question, then give one overall score without inventing per-question weights. An uncertain question leaves the final score for manual review. A task's scoring table can still specify unequal question points. See [two-question requirements](examples/two_questions.md) and an editable [100-point shared policy](examples/grading_policy.md).
+
+```bash
+mini-homework-agent grade COURSE_ID ASSIGNMENT_ID \
+  --requirements examples/two_questions.md \
+  --policy examples/grading_policy.md --limit 5
+```
+
+Markdown files are read as text; linked diagrams are not automatically fetched or interpreted. Include their decisive branches, formulas, or conditions in text as part of the teacher's requirements.
 
 ## Grade from the command line
 

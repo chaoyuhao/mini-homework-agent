@@ -9,7 +9,7 @@ mini-homework-agent is a CLI tool for AI-assisted homework grading on Canvas LMS
 - An authorized Canvas deployment and token, configured privately.
 - A model endpoint suitable for the course data, configured privately.
 - The course ID and assignment ID, selected from the account's accessible courses.
-- A Markdown file containing the actual assignment requirements and scoring rules.
+- A required Markdown file containing the actual assignment requirements and scoring structure, plus an optional shared grading-policy Markdown file.
 - The requested batch size and whether already graded work is in scope.
 
 Credentials are not arguments to the grading CLI. Store them in `.secrets.json` or the documented environment variables. Never paste them into an issue, README, generated command transcript, or trajectory.
@@ -36,6 +36,10 @@ Initialize private configuration with `init`, or use the user's existing configu
   --requirements homework.md --limit 5
 .venv/bin/python -m mini_homework_agent serve
 ```
+
+For reusable rules, add `--policy grading_policy.md` to `grade` or `grade-local`; do not copy another assignment's dimensions into the new task. The shared file supplies policy only, while explicit task policies override shared defaults. Both documents are snapshotted in the batch.
+
+If there are multiple questions but no teacher-provided point allocations, write `评分方式：整体评分` or `Scoring mode: holistic` and use numbered question headings (`## 第1题`, `## Question 1`). The result contains `question_checks` for each question and one overall scored rubric item. Check statuses and evidence independently; never invent equal question weights. An uncertain question leaves the whole result for manual review. Linked images in Markdown require text descriptions of the decisive conditions; they are not automatically sent to the model.
 
 The command returns `run_id`, `count`, and the local JSON record path. A submission error is retained separately from a numeric score. Use the local review UI to inspect code, criteria, evidence, final score, and feedback.
 

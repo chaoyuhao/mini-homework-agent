@@ -14,7 +14,7 @@ from .config import DATA, save_json, selected_model
 from .llm import grade
 from .materials import plain_html, submission_materials
 from .net import RequestPacer
-from .requirements import apply_policy, grading_policy, internal_reason as derive_internal_reason, markdown_rubric, score_in, student_feedback, validate_requirements
+from .requirements import apply_policy, holistic_scoring, instruction_bundle, internal_reason as derive_internal_reason, markdown_rubric, score_in, student_feedback, validate_requirements
 
 LOCK = threading.RLock()
 
@@ -46,6 +46,9 @@ def rubric_for(assignment, custom=None, requirements=""):
     explicit = markdown_rubric(requirements) if custom is None else None
     source = "custom" if custom is not None else ("markdown" if explicit else "canvas")
     raw = custom if custom is not None else (explicit or assignment.get("rubric"))
+    if custom is None and not explicit and holistic_scoring(requirements):
+        source = "holistic"
+        raw = [{"id": "overall", "description": "整体完成度：逐题检查教师要求并记录证据，按整体完成情况给分，不为题目推定分值或新增评分维度", "points": maximum}]
     if not raw:
         source = "provisional"
         # Visible, provisional criteria only; human approval is always required.
@@ -107,8 +110,9 @@ def processing(run_id):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def batch(course_id, assignment_id, *, requirements="", limit=5, workers=1, request_interval=5, model_name=None, custom_rubric=None, notes="", include_graded=False, canvas=None, progress=None):
-    requirements = validate_requirements(requirements)
+def batch(course_id, assignment_id, *, requirements="", grading_rules="", limit=5, workers=1, request_interval=5, model_name=None, custom_rubric=None, notes="", include_graded=False, canvas=None, progress=None):
+    instructions = instruction_bundle(requirements, grading_rules)
+    requirements = instructions["instructor_markdown"]
     RequestPacer(request_interval)
     if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 8:
         raise ValueError("并行数量必须为 1–8")
@@ -119,10 +123,10 @@ def batch(course_id, assignment_id, *, requirements="", limit=5, workers=1, requ
     if assignment.get("grading_type") not in ("points", "percent", None):
         raise ValueError("第一版仅支持数值分数或百分比作业")
     rubric, source = rubric_for(assignment, custom_rubric, requirements)
-    policy = grading_policy(requirements)
+    instructions = instruction_bundle(requirements, grading_rules, maximum=assignment["points_possible"])
     description, assignment_warnings = plain_html(assignment.get("description") or ""), []
     model = selected_model(model_name)
-    assignment_data = {"title": assignment["name"], "canvas_description_context": description, "instructor_markdown": requirements, "grading_policy": policy, "points_possible": assignment["points_possible"], "instructor_notes": notes}
+    assignment_data = {"title": assignment["name"], "canvas_description_context": description, **instructions, "points_possible": assignment["points_possible"], "instructor_notes": notes}
     rows = canvas.submissions(course_id, assignment_id)
     candidates = [s for s in rows if not s.get("excused") and s.get("submitted_at") and s.get("submission_type") in ("online_text_entry", "online_upload") and (include_graded or s.get("score") is None)]
     candidates.sort(key=lambda s: s["user_id"])
@@ -404,16 +408,17 @@ def demo(offline=False):
     return run
 
 
-def grade_local(requirements_path, submission_path, *, title="本地作业", points=100, model_name=None, custom_rubric=None):
+def grade_local(requirements_path, submission_path, *, title="本地作业", points=100, grading_rules="", model_name=None, custom_rubric=None):
     from .materials import extract
-    requirements = validate_requirements(requirements_path.read_text(encoding="utf-8-sig"))
+    instructions = instruction_bundle(requirements_path.read_text(encoding="utf-8-sig"), grading_rules, maximum=points)
+    requirements = instructions["instructor_markdown"]
     if submission_path.stat().st_size > 10_000_000:
         raise ValueError("本地提交文件超过 10 MB")
     materials, warnings = extract(submission_path.name, submission_path.read_bytes())
     if not materials.strip():
         raise ValueError("本地提交没有可读取内容")
-    policy = grading_policy(requirements)
-    assignment = {"title": title, "instructor_markdown": requirements, "grading_policy": policy, "points_possible": points, "material_warnings": warnings}
+    policy = instructions["grading_policy"]
+    assignment = {"title": title, **instructions, "points_possible": points, "material_warnings": warnings}
     rubric, source = rubric_for({"points_possible": points}, custom_rubric, requirements)
     model = selected_model(model_name)
     result = grade(model, assignment, rubric, materials)
