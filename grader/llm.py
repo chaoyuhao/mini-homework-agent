@@ -16,7 +16,8 @@ SYSTEM = """你是大学 Python 程序设计助教。依据题目及评分标准
 {"criteria":[{"id":"输入rubric中的原始ID","score":数字,"feedback":"内部逐项评价与扣分理由","evidence":"代码片段或具体位置"}],"feedback":"发给学生的具体问题；无需评语时为空字符串","internal_reason":"内部评分依据，不发给学生","confidence":0到1数字,"needs_review":布尔值,"assessment":"normal","assessment_reason":"依据附件内容说明分类"}
 criteria 必须完整对应输入的每一个评分项，id 原样使用 rubric.id，不能改为描述；分数在 0 至该项 points 范围内。不要自己添加评分标准。
 assessment 只能是 normal、insufficient 或 anomaly；评分政策决定如何使用它，不能推断学生动机。
-feedback 可以为空。需要给学生评语时只写具体缺项或错误，不写表扬、泛泛建议或鼓励；内部判断和可选建议放在 internal_reason 与逐项评价中。"""
+仅最外层 feedback 是学生评语，可以为空。criteria[*].feedback 和 question_checks[*].feedback 是内部评价，必须填写非空文本；满分、95分或不发学生评语时也要写明达标依据或实际缺口，不能一起留空。内部评价不会发给学生。
+需要给学生评语时只写具体缺项或错误，不写表扬、泛泛建议或鼓励；内部判断和可选建议放在 internal_reason 与逐项评价中。"""
 
 
 def validate_grade(value, rubric, *, questions=None):
@@ -27,14 +28,14 @@ def validate_grade(value, rubric, *, questions=None):
     if len(rows) != len(expected) or {str(r.get("id")) for r in rows if isinstance(r, dict)} != set(expected):
         raise ValueError("模型评分项不匹配")
     clean = []
-    for row in rows:
+    for index, row in enumerate(rows):
         key = str(row["id"])
         score = row.get("score")
         if isinstance(score, bool) or not isinstance(score, (float, int)) or not math.isfinite(score) or not 0 <= score <= expected[key]["points"]:
             raise ValueError("模型分数越界或无效")
         for field in ("feedback", "evidence"):
             if not isinstance(row.get(field), str) or not row[field].strip() or len(row[field]) > 3000:
-                raise ValueError("模型缺少有效反馈或证据")
+                raise ValueError(f"criteria[{index}].{field} 必须是非空且不超过 3000 字的内部评价或证据；满分也需填写。只有最外层 feedback 学生评语可以为空")
         clean.append({"id": key, "score": round(score, 2), "points": expected[key]["points"], "description": expected[key]["description"], "feedback": row["feedback"], "evidence": row["evidence"]})
     confidence = value.get("confidence")
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
@@ -55,7 +56,7 @@ def validate_grade(value, rubric, *, questions=None):
                 raise ValueError("逐题 status 必须是 met、gap 或 uncertain")
             for field in ("feedback", "evidence"):
                 if not isinstance(check.get(field), str) or not check[field].strip() or len(check[field]) > 3000:
-                    raise ValueError("每道题必须有内部评价 feedback 与具体 evidence")
+                    raise ValueError(f"question_checks[{check['id']}].{field} 必须是非空且不超过 3000 字的内部评价或证据；不发送给学生，满分也需填写")
             clean_checks.append({"id": check["id"], "title": expected_questions[check["id"]]["title"], "status": check["status"], "feedback": check["feedback"].strip(), "evidence": check["evidence"].strip()})
         result["question_checks"] = sorted(clean_checks, key=lambda q: list(expected_questions).index(q["id"]))
         result["needs_review"] |= any(q["status"] == "uncertain" for q in clean_checks)

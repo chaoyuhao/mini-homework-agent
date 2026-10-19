@@ -155,6 +155,23 @@ class QuestionEvidenceTests(unittest.TestCase):
         self.assertIn("error", env.execute({"tool": "submit_grade", "grade": bad}))
         self.assertTrue(env.execute({"tool": "submit_grade", "grade": self.value})["complete"])
 
+    def test_agent_can_repair_blank_internal_feedback_with_an_actionable_path(self):
+        assignment = requirements.instruction_bundle(TASKS, RULES)
+        valid = complete_grade(self.rubric, assignment["questions"])
+        invalid = copy.deepcopy(valid)
+        invalid["criteria"][0]["feedback"] = ""
+        calls = []
+        def query(messages):
+            repaired = calls and "criteria[0].feedback" in messages[-1]["content"]
+            value = valid if repaired else invalid
+            calls.append(value)
+            return {"role": "assistant", "content": json.dumps(value), "extra": {"actions": [{"tool": "submit_grade", "grade": value}]}}
+        with patch.object(agent.HomeworkModel, "query", side_effect=query):
+            result = agent.run_grader({"name": "synthetic"}, assignment, self.rubric, "synthetic code")
+        self.assertEqual(result["agent_steps"], 2)
+        self.assertEqual(result["feedback"], "")
+        self.assertTrue(result["criteria"][0]["feedback"])
+
     def test_real_agent_loop_validates_question_checks_without_duplicating_text(self):
         assignment = requirements.instruction_bundle(TASKS)
         captured = []
