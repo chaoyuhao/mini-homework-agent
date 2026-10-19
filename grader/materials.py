@@ -103,21 +103,21 @@ def extract(name, data):
             except Exception as e:
                 notes.append("RAR 内附件读取失败：" + (str(e) if isinstance(e, ValueError) else type(e).__name__))
         text = "\n\n".join(chunks)
-    elif suffix == ".doc":
+    elif suffix in (".doc", ".rtf"):
         if data.startswith(b"PK"):
             return extract("converted.docx", data)
         if sys.platform != "darwin":
-            raise ValueError("旧版 .doc 需要转换为 .docx 或人工查看")
+            raise ValueError(f"{suffix} 需要转换为 .docx 或人工查看")
         with tempfile.TemporaryDirectory(prefix="mini-homework-doc-") as folder:
             from pathlib import Path
-            source = Path(folder) / "input.doc"
+            source = Path(folder) / ("input" + suffix)
             source.write_bytes(data)
             try:
                 converted = subprocess.run(["textutil", "-convert", "docx", "-stdout", str(source)], capture_output=True, timeout=30)
             except subprocess.TimeoutExpired:
-                raise ValueError("旧版 Word 转换超时") from None
+                raise ValueError("Word/RTF 转换超时") from None
             if converted.returncode or not converted.stdout.startswith(b"PK"):
-                raise ValueError("旧版 Word 转换失败，请人工查看")
+                raise ValueError("Word/RTF 转换失败，请人工查看")
             return extract("converted.docx", converted.stdout)
     elif suffix in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".heic"):
         from .ocr import recognize

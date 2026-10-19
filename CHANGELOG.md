@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Read RTF submissions through the existing bounded macOS document converter; conversion failures remain manual-review cases.
 - Clarify that only student feedback may be blank; return precise internal-feedback field paths so the agent can repair invalid results.
 - Separate optional shared grading-policy Markdown from assignment requirements in the CLI and UI, retaining both snapshots and legacy single-file support.
 - Support explicit holistic scoring and independent evidence checks for numbered questions without inventing point allocations; uncertain questions require manual scoring.

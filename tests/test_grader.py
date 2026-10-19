@@ -3,6 +3,7 @@ import io
 import importlib.util
 import json
 import tempfile
+from types import SimpleNamespace
 import unittest
 import zipfile
 from pathlib import Path
@@ -120,6 +121,24 @@ class MaterialTests(unittest.TestCase):
             z.writestr("word/document.xml", '<w:document xmlns:w="urn:word"><w:p><w:r><w:t>print(42)</w:t></w:r></w:p></w:document>')
         text, _ = materials.extract("answer.docx", stream.getvalue())
         self.assertEqual(text, "print(42)")
+
+    def test_rtf_uses_bounded_document_conversion_without_running_code(self):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as z:
+            z.writestr("word/document.xml", '<w:document xmlns:w="urn:word"><w:p><w:r><w:t>raise SystemExit("never execute")</w:t></w:r></w:p></w:document>')
+        converted = SimpleNamespace(returncode=0, stdout=stream.getvalue())
+        with patch.object(materials.sys, "platform", "darwin"), patch.object(materials.subprocess, "run", return_value=converted) as convert:
+            text, notes = materials.extract("synthetic.rtf", b"{\\rtf1 synthetic code}")
+        self.assertEqual(text, 'raise SystemExit("never execute")')
+        self.assertEqual(notes, [])
+        self.assertEqual(convert.call_args.args[0][:4], ["textutil", "-convert", "docx", "-stdout"])
+        self.assertTrue(convert.call_args.args[0][-1].endswith("input.rtf"))
+        self.assertEqual(convert.call_args.kwargs["timeout"], 30)
+
+    def test_rtf_conversion_failure_is_not_empty_student_work(self):
+        with patch.object(materials.sys, "platform", "darwin"), patch.object(materials.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout=b"")):
+            with self.assertRaisesRegex(ValueError, "转换失败"):
+                materials.extract("synthetic.rtf", b"{\\rtf1 broken}")
 
     def test_image_attachment_uses_ocr_and_warns(self):
         with patch("grader.ocr.recognize", return_value=("visible code", ["OCR warning"])) as ocr:
